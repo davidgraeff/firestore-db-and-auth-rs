@@ -2,7 +2,7 @@
 
 <img align="right" src="./doc/logo.png" />
 
-[![Build Status](https://travis-ci.org/servo/bincode.svg)](https://travis-ci.org/davidgraeff/firestore-db-and-auth)
+[![Build Status](https://travis-ci.org/servo/bincode.svg)](https://travis-ci.org/davidgraeff/firestore-db-and-auth-rs)
 [![](https://meritbadge.herokuapp.com/firestore-db-and-auth)](https://crates.io/crates/firestore-db-and-auth)
 [![](https://img.shields.io/badge/license-MIT-blue.svg)](http://opensource.org/licenses/MIT)
 
@@ -13,6 +13,13 @@ Features:
 * Optionally handles authentication and token refreshing for you
 * Support for the downloadable Google service account json file from [Google Clound console](https://console.cloud.google.com/apis/credentials/serviceaccountkey).
   (See https://cloud.google.com/storage/docs/reference/libraries#client-libraries-install-cpp)
+
+Usecases:
+* Strictly typed document read/write/query access
+* Cloud functions (Google Compute, AWS Lambda) access to Firestore
+
+Limitations:
+* Listening to document / collection changes is not yet possible
 
 ### Document operations
 
@@ -253,7 +260,7 @@ What can be done to make this crate more awesome:
 
 * The communication efficieny can be improved by using gRPC/Protobuf instead of HTTP/Json
 * More DTOs (Data transfer objects) and convenience methods should be exposed for the Firebase Auth API
-* Nice to have: Transactions, batch_get and streaming support for Firestore
+* Nice to have: Transactions, batch_get and streaming (listen) support for Firestore
 
-This library does not have the ambition to mirror the http/gRPC API 1:1 to rust.
+This library does not have the ambition to mirror the http/gRPC API 1:1.
 There are auto-generated libraries for this purpose.
