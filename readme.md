@@ -2,14 +2,14 @@
 
 <img align="right" src="./doc/logo.png" />
 
-[![Build Status](https://travis-ci.org/servo/bincode.svg)](https://travis-ci.org/davidgraeff/firestore-db-and-auth-rs)
+[![Build Status](https://travis-ci.org/davidgraeff/firestore-db-and-auth-rs.svg)](https://travis-ci.org/davidgraeff/firestore-db-and-auth-rs)
 [![](https://meritbadge.herokuapp.com/firestore-db-and-auth)](https://crates.io/crates/firestore-db-and-auth)
 [![](https://img.shields.io/badge/license-MIT-blue.svg)](http://opensource.org/licenses/MIT)
 
 This crate allows easy access to your Google Firestore DB via service account or OAuth impersonated Google Firebase Auth credentials.
 
 Features:
-* A CRUD subset of the Firestore v1 API
+* Subset of the Firestore v1 API
 * Optionally handles authentication and token refreshing for you
 * Support for the downloadable Google service account json file from [Google Clound console](https://console.cloud.google.com/apis/credentials/serviceaccountkey).
   (See https://cloud.google.com/storage/docs/reference/libraries#client-libraries-install-cpp)
@@ -51,7 +51,7 @@ let result = documents::write(&mut session, "tests", Some("service_test"), &obj)
 println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time, result.updated_time);
 ```
 
-If you want to read the document with the id "service_test" from the Firestore "tests" collection you would do this:
+Read the document with the id "service_test" from the Firestore "tests" collection:
 
 ```rust
 let obj : DemoDTO = documents::read(&mut session, "tests", "service_test")?;
@@ -63,7 +63,7 @@ It will hide the complexity of the paging API and fetches new documents when nec
 ```rust
 let values: documents::List<DemoDTO, _> = documents::list(&mut session, "tests");
 for doc_result in values {
-    // The document is wrapped in a Result<> because fetching new data could have caused errors
+    // The document is wrapped in a Result<> because fetching new data could have failed
     let doc = doc_result?;
     println!("{:?}", doc);
 }
@@ -86,7 +86,7 @@ let objs : Vec<DemoDTO> = documents::query(&mut session, "tests", "Sam Weiss", d
 
 1. Download the service accounts credentials file and store it as "firebase-service-account.json".
    The file should contain `"private_key_id": ...`.
-1. Add another field `"api_key" : "YOUR_API_KEY"` and replace YOUR_API_KEY with your *Web API key*, to be found in the [Google Firebase console](https://console.firebase.google.com) in "Project Overview -> Settings - > General".
+2. Add another field `"api_key" : "YOUR_API_KEY"` and replace YOUR_API_KEY with your *Web API key*, to be found in the [Google Firebase console](https://console.firebase.google.com) in "Project Overview -> Settings - > General".
 
 ```rust
 use firestore_db_and_auth::{credentials, sessions};
@@ -218,21 +218,18 @@ The usual start up process includes
 * read in the json credentials file,
 * create a service account session by creating a custom jwt token.
 
-Even on optimal conditions you will experience a few hundred milliseconds delay before Firestore can be accessed.
+This crate ships with a helper tool that creates a binary serialized  `service_acount::Session` (stored in `service_account_session.bin`).
+Head to your directory that contains your `firebase-service-account.json` and execute `cargo run --bin binary_session`.
 
-1. This crate ships with a helper tool that creates a binary serialized  `service_acount::Session` (stored in `service_account_session.bin`).
-   Head to your directory that contains your `firebase-service-account.json` and execute `cargo run --bin binary_session`.
+At runtime you avoid any file reads, network calls, jwt creation by using the `from_binary` macro which internally uses `std::include_bytes`.
+The predefined session will be embedded into your executable:
 
-2. At runtime you avoid any file reads, network calls, jwt creation by using the following macro:
-   ```rust
-   use firestore_db_and_auth::{sessions, from_binary};
+```rust
+use firestore_db_and_auth::{sessions, from_binary};
 
-   let session : sessions::service_account::Session = from_binary!("../../service_account_session.bin");
-   ```
-   Note: The file is located relative to the current source file. 
-
-
-The above macro uses `std::include_bytes` internally to embed the predefined session into your executable.
+let session : sessions::service_account::Session = from_binary!("../../service_account_session.bin");
+```
+Note: The file is located relative to the current source file. 
 
 If you need to call a Firestore API on behalf of a Firebase Auth user via `user::Session`,
 you can at any time access  the `credentials::Credentials` object from that `service_account::Session`.
@@ -258,9 +255,10 @@ Maintenance status: Stable
 
 What can be done to make this crate more awesome:
 
-* The communication efficieny can be improved by using gRPC/Protobuf instead of HTTP/Json
-* More DTOs (Data transfer objects) and convenience methods should be exposed for the Firebase Auth API
-* Nice to have: Transactions, batch_get and streaming (listen) support for Firestore
+* The communication efficieny can be improved by using gRPC/Protobuf instead of HTTP/Json, which also allows for data streaming.
+* More DTOs (Data transfer objects) and convenience methods should be exposed for the Firebase Auth API.
+  Especially the write/update part has many usecases.
+* Nice to have: Transactions, batch_get support for Firestore
 
 This library does not have the ambition to mirror the http/gRPC API 1:1.
 There are auto-generated libraries for this purpose.
