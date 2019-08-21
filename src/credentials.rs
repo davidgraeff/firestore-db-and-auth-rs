@@ -2,7 +2,6 @@
 use std::fs::File;
 use std::io::prelude::*;
 
-
 use super::errors;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -40,9 +39,10 @@ pub struct Credentials {
     pub client_email: String,
     pub client_id: String,
     pub api_key: String,
-    pub pub_key: Option<BTreeMap<String, biscuit::jwk::RSAKeyParameters>>,
-    #[cfg(feature = "faststart")]
-    pub private_key_der: Vec<u8>
+    #[serde(default,skip)] /// This is not defined in the json file and computed
+    pub pub_key: BTreeMap<String, biscuit::jwk::RSAKeyParameters>,
+    #[serde(default)] /// This is not defined in the json file and computed
+    pub private_key_der: Vec<u8>,
 }
 
 use regex::Regex;
@@ -82,33 +82,39 @@ fn retrieve_jwks_for_google_account(
 impl Credentials {
     /// Find the key in the set that matches the given key id, if any.
     pub fn public_key(&self, kid: &str) -> Option<&biscuit::jwk::RSAKeyParameters> {
-        self.pub_key.as_ref().unwrap().get(kid)
+        self.pub_key.get(kid)
     }
 
+    /// Creates a ring RsaKeyPair out of the private key of this credentials object
     pub fn create_rsa_key_pair(&self) -> errors::Result<ring::signature::RsaKeyPair> {
-         Ok(
-                ring::signature::RsaKeyPair::from_pkcs8(untrusted::Input::from(self.private_key_der.as_slice()))?,
-            )
+        ring::signature::RsaKeyPair::from_pkcs8(&self.private_key_der).map_err(|e| e.into())
     }
 
+    /// Create a Crentials object of a google-service-account json file.
+    ///
+    /// The corresponding jwks (public keys) for the given service account as well as the
+    /// "securetoken@system.gserviceaccount.com" are also fetched. Those public keys
+    /// are used to verify access tokens.
     pub fn from_file(credential_file: &str) -> errors::Result<Self> {
         let mut f = File::open(credential_file)?;
         let mut buffer = Vec::new();
         f.read_to_end(&mut buffer)?;
         let mut credentials: Credentials = serde_json::from_slice(buffer.as_slice())?;
-        Ok({
-            let mut result: BTreeMap<String, biscuit::jwk::RSAKeyParameters> = BTreeMap::new();
-            retrieve_jwks_for_google_account(&mut result, &credentials.client_email)?;
+        credentials.compute_missing_fields()?;
+        Ok(credentials)
+    }
+
+    /// Call this method after deserializing
+    pub fn compute_missing_fields(&mut self) -> errors::Result<()> {
+        self.private_key_der = pem_to_der(&self.private_key);
+        if self.pub_key.is_empty() {
+            retrieve_jwks_for_google_account(&mut self.pub_key, &self.client_email)?;
             retrieve_jwks_for_google_account(
-                &mut result,
+                &mut self.pub_key,
                 "securetoken@system.gserviceaccount.com",
             )?;
-            credentials.pub_key = Some(result);
-            credentials.private_key_der = pem_to_der(&credentials.private_key);
-            // Catch any error so that unwrap can be used later on
-            credentials.create_rsa_key_pair()?; 
-            credentials
-        })
+        }
+        Ok(())
     }
 }
 

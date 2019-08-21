@@ -1,9 +1,6 @@
 use super::credentials;
 use super::errors;
 
-// use super::FirebaseAuthWrapper;
-// use super::{FirebaseAuthBearer, FirebaseAuthBearerSimple};
-
 use super::FirebaseAuthBearer;
 
 pub mod user {
@@ -95,7 +92,6 @@ pub mod user {
         uid: String,
     }
 
-
     impl Session {
         /// Create a new firestore user session via a valid refresh_token
         pub fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session> {
@@ -127,11 +123,9 @@ pub mod user {
             });
             let expected_claims = ClaimsSet::<FirebaseUIDClaims> {
                 registered: RegisteredClaims {
-                    issuer: Some(FromStr::from_str(&credentials.client_email).unwrap()),
-                    subject: Some(FromStr::from_str(&credentials.client_email).unwrap()),
-                    audience: Some(SingleOrMultiple::Single(
-                        FromStr::from_str(JWT_AUD).unwrap(),
-                    )),
+                    issuer: Some(FromStr::from_str(&credentials.client_email)?),
+                    subject: Some(FromStr::from_str(&credentials.client_email)?),
+                    audience: Some(SingleOrMultiple::Single(FromStr::from_str(JWT_AUD)?)),
                     expiry: Some(biscuit::Timestamp::from(Utc::now().add(Duration::hours(1)))),
                     issued_at: Some(biscuit::Timestamp::from(Utc::now())),
                     ..Default::default()
@@ -142,9 +136,8 @@ pub mod user {
             };
             let jwt = JWT::new_decoded(header, expected_claims);
 
-// TODO: Get rid of "Secret" as soon as biscuit got rid of it
- let signing_secret =
-                Secret::RsaKeyPair(std::sync::Arc::new(credentials.create_rsa_key_pair().unwrap()));
+            let signing_secret =
+                Secret::RsaKeyPair(std::sync::Arc::new(credentials.create_rsa_key_pair()?));
             let jwt = jwt
                 .into_encoded(&signing_secret)?
                 .unwrap_encoded()
@@ -304,8 +297,8 @@ pub mod service_account {
     /// Service account session
     #[derive(Serialize, Deserialize)]
     pub struct Session {
-        jwt: GoogleJWT,
         pub credentials: Credentials,
+        jwt: GoogleJWT,
         bearer_cache: String,
     }
 
@@ -314,7 +307,7 @@ pub mod service_account {
             &self.credentials.project_id
         }
         /// Return the encoded jwt to be used as bearer token. If the jwt
-        /// issue_at is older than 50mins, it will be updated to the current time.
+        /// issue_at is older than 50 mins, it will be updated to the current time.
         ///
         /// For this to work, you must use a mutable session object
         fn bearer(&'a mut self) -> &'a str {
@@ -323,7 +316,7 @@ pub mod service_account {
             let now = biscuit::Timestamp::from(Utc::now());
             if let Some(issued_at) = claims.issued_at.as_ref() {
                 let diff: Duration = Utc::now().time() - issued_at.time();
-                if diff.num_minutes() > 45 {
+                if diff.num_minutes() > 50 {
                     claims.issued_at = Some(now);
                 } else {
                     return &self.bearer_cache;
@@ -331,8 +324,9 @@ pub mod service_account {
             } else {
                 claims.issued_at = Some(now);
             }
-            let signing_secret =
-                Secret::RsaKeyPair(std::sync::Arc::new(self.credentials.create_rsa_key_pair().unwrap()));
+            let signing_secret = Secret::RsaKeyPair(std::sync::Arc::new(
+                self.credentials.create_rsa_key_pair().unwrap(),
+            ));
             self.bearer_cache = self
                 .jwt
                 .encode(&signing_secret)
@@ -344,8 +338,6 @@ pub mod service_account {
     }
 
     #[cfg(feature = "faststart")]
-    use bincode;
-
     #[macro_export]
     macro_rules! from_binary {
         ($filename:expr) => {{
@@ -367,17 +359,17 @@ pub mod service_account {
         pub fn new(credentials: Credentials) -> Result<Session> {
             let header = From::from(RegisteredHeader {
                 algorithm: SignatureAlgorithm::RS256,
-                key_id: Some(FromStr::from_str(&credentials.private_key_id[..]).unwrap()),
+                key_id: Some(credentials.private_key_id.to_owned()),
                 ..Default::default()
             });
             let expected_claims = ClaimsSet::<biscuit::Empty> {
                 // JWTGoogleClaims
                 registered: RegisteredClaims {
-                    issuer: Some(FromStr::from_str(&credentials.client_email[..]).unwrap()),
-                    audience: Some(SingleOrMultiple::Single(
-                        StringOrUri::from_str(JWT_SUBJECT).unwrap(),
-                    )),
-                    subject: Some(StringOrUri::from_str(&credentials.client_email[..]).unwrap()),
+                    issuer: Some(FromStr::from_str(&credentials.client_email[..])?),
+                    audience: Some(SingleOrMultiple::Single(StringOrUri::from_str(
+                        JWT_SUBJECT,
+                    )?)),
+                    subject: Some(StringOrUri::from_str(&credentials.client_email[..])?),
                     expiry: Some(biscuit::Timestamp::from(Utc::now().add(Duration::hours(1)))),
                     issued_at: Some(biscuit::Timestamp::from(Utc::now())),
                     ..Default::default()
@@ -386,18 +378,26 @@ pub mod service_account {
             };
             let jwt = JWT::new_decoded(header, expected_claims);
 
-// TODO: Get rid of "Secret" as soon as biscuit got rid of it
- let signing_secret =
-                Secret::RsaKeyPair(std::sync::Arc::new(credentials.create_rsa_key_pair().unwrap()));
+            let signing_secret =
+                Secret::RsaKeyPair(std::sync::Arc::new(credentials.create_rsa_key_pair()?));
             Ok(Session {
-                bearer_cache: jwt
-                    .encode(&signing_secret)
-                    .unwrap()
-                    .unwrap_encoded()
-                    .encode(),
+                bearer_cache: jwt.encode(&signing_secret)?.unwrap_encoded().encode(),
                 jwt: jwt,
                 credentials: credentials,
             })
+        }
+
+        pub fn from_binary(binary_session_file: &str) -> Result<Session> {
+            use std::fs::File;
+            use std::io::prelude::*;
+            use std::path::Path;
+            let mut target = File::open(&Path::new(binary_session_file))?;
+            let mut data = Vec::new();
+            target.read_to_end(&mut data)?;
+
+            let mut credentials: Credentials = bincode::deserialize(&data)?;
+            credentials.compute_missing_fields()?;
+            Session::new(credentials)
         }
     }
 }

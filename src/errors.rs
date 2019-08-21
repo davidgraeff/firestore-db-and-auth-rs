@@ -8,6 +8,8 @@ pub type Result<T> = std::result::Result<T, FirebaseError>;
 #[derive(Debug)]
 pub enum FirebaseError {
     Generic(&'static str),
+    #[cfg(feature = "faststart")]
+    Bincode(bincode::Error),
     UnexpectedResponse(&'static str, reqwest::StatusCode, String, String),
     Request(reqwest::Error),
     JWT(biscuit::errors::Error),
@@ -15,6 +17,13 @@ pub enum FirebaseError {
     RSA(ring::error::KeyRejected),
     //NoneError(std::option::NoneError),
     IO(std::io::Error),
+}
+
+#[cfg(feature = "faststart")]
+impl std::convert::From<bincode::Error> for FirebaseError {
+    fn from(error: bincode::Error) -> Self {
+        FirebaseError::Bincode(error)
+    }
 }
 
 impl std::convert::From<std::io::Error> for FirebaseError {
@@ -62,6 +71,7 @@ impl fmt::Display for FirebaseError {
                 writeln!(f, "{}", source)?;
                 Ok(())
             }
+            FirebaseError::Bincode(ref e) => e.fmt(f),
             FirebaseError::Request(ref e) => e.fmt(f),
             FirebaseError::JWT(ref e) => e.fmt(f),
             FirebaseError::RSA(ref e) => e.fmt(f),
@@ -77,9 +87,10 @@ impl error::Error for FirebaseError {
         match *self {
             FirebaseError::Generic(ref _m) => None,
             FirebaseError::UnexpectedResponse(_, _, _, _) => None,
+            FirebaseError::Bincode(ref e) => Some(e),
             FirebaseError::Request(ref e) => Some(e),
             FirebaseError::JWT(ref e) => Some(e),
-            FirebaseError::RSA(ref e) => Some(e),
+            FirebaseError::RSA(_) => None,
             FirebaseError::IO(ref e) => Some(e),
             //  FirebaseError::NoneError(ref e) => Some(e),
             FirebaseError::Ser(ref e) => Some(e),

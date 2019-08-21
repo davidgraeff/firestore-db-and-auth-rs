@@ -5,28 +5,32 @@ authors = ["David Gräff <david.graeff@web.de>"]
 edition = "2018"
 license = "MIT"
 description = "This crate allows easy access to your Google Firestore DB via service account or OAuth impersonated Google Firebase Auth credentials."
+readme = "readme.md"
+keywords = ["firestore", "auth"]
+categories = ["api-bindings","authentication"]
+maintenance = { status = "passively-maintained" }
 
 [dependencies]
-url  = "1.7.2"
-reqwest = "^0.9"
-serde_derive = "^1.0"
-serde = "^1.0"
-serde_json = "^1.0"
-chrono = { version = "0.4", features = ["serde"] }
-biscuit = "0.2" # jwt, jws, jwk support
-ring = "0.14" # crypto; signing for jws
-untrusted = "0.6.2" # used by ring
-regex = "1.1" # for extracting a pem private key
-rustc-serialize = "0.3" # for base64 pem -> psck#8
-bincode = { version = "1.1", optional = true }
+url  = "2.1.0"
+reqwest = "0.9.20"
+serde_derive = "1.0.99"
+serde = "1.0.99"
+serde_json = "1.0.40"
+chrono = { version = "0.4.7", features = ["serde"] }
+biscuit = "0.3.1"
+ring = "0.16.7"
+untrusted = "0.7.0"
+regex = "1.2.1"
+rustc-serialize = "0.3.24"
+bincode = { version = "1.1.4", optional = true }
 
 [dependencies.rocket]
-version = "^0.4.1"
+version = "0.4.2"
 default-features = false
 optional = true
 
 [dependencies.rocket_contrib]
-version = "^0.4.1"
+version = "0.4.2"
 default-features = false
 features = ["json","redis_pool"]
 optional = true
@@ -35,3 +39,7 @@ optional = true
 default = ["faststart"]
 rocket_support = ["rocket","rocket_contrib"]
 faststart = ["bincode"]
+
+[[bin]]
+name = "binary_session"
+required-features = ["faststart"]
