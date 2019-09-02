@@ -1,6 +1,0 @@
-language: rust
-rust:
-  - nightly
-cache: cargo
-before_script:
-  - ./ci.sh

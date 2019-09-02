@@ -2,7 +2,8 @@
 
 <img align="right" src="./doc/logo.png" />
 
-[![Build Status](https://travis-ci.org/davidgraeff/firestore-db-and-auth-rs.svg)](https://travis-ci.org/davidgraeff/firestore-db-and-auth-rs)
+[![Build Status](https://github.com/davidgraeff/firestore-db-and-auth-rs/workflows/Integration/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions)
+[![Build Status](https://github.com/davidgraeff/firestore-db-and-auth-rs/workflows/With%20Rocket/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions)
 [![](https://meritbadge.herokuapp.com/firestore-db-and-auth)](https://crates.io/crates/firestore-db-and-auth)
 [![](https://img.shields.io/badge/license-MIT-blue.svg)](http://opensource.org/licenses/MIT)
 
