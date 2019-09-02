@@ -340,7 +340,7 @@ where for<'c> BEARER: FirebaseAuthBearer<'c> {
 
 fn get_new_data<'a>(
     url: &str,
-    auth: &'a mut FirebaseAuthBearer<'a>,
+    auth: &'a mut dyn FirebaseAuthBearer<'a>,
 ) -> Result<dto::ListDocumentsResponse> {
     let mut resp = Client::new()
         .get(url)
