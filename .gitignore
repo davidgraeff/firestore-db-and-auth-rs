@@ -1,4 +1,4 @@
 firebase-service-account.json
 refresh-token-for-tests.txt
-service_account_session.bin
 target/
+Cargo.lock
