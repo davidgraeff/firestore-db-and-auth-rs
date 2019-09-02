@@ -2,3 +2,5 @@ language: rust
 rust:
   - nightly
 cache: cargo
+before_script:
+  - echo $SERVICE_ACCOUNT_JSON > firebase-service-account.json
