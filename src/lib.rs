@@ -151,7 +151,11 @@ mod tests {
         }
         assert_eq!(count, 2);
 
-        documents::delete(&mut user_session, "tests/test")?;
+        // test if the call fails for a non existing document
+        let r = documents::delete(&mut user_session, "tests/non_existing", true);
+        assert!(r.is_err());
+
+        documents::delete(&mut user_session, "tests/test", false)?;
 
         // Check if document is indeed removed
         let results: Vec<DemoDTO> = documents::query(

@@ -3,9 +3,9 @@ use super::errors::FirebaseError;
 use super::sessions;
 use rocket::{http::Status, request, Outcome, State};
 
-pub struct ApiKey(pub sessions::user::Session);
+pub struct FirestoreAuthSessionGuard(pub sessions::user::Session);
 
-impl<'a, 'r> request::FromRequest<'a, 'r> for ApiKey {
+impl<'a, 'r> request::FromRequest<'a, 'r> for FirestoreAuthSessionGuard {
     type Error = FirebaseError;
 
     fn from_request(request: &'a request::Request<'r>) -> request::Outcome<Self, Self::Error> {
@@ -35,6 +35,6 @@ impl<'a, 'r> request::FromRequest<'a, 'r> for ApiKey {
         if session.is_err() {
             return Outcome::Failure((Status::Unauthorized, session.err().unwrap()));
         }
-        Outcome::Success(ApiKey(session.unwrap()))
+        Outcome::Success(FirestoreAuthSessionGuard(session.unwrap()))
     }
 }

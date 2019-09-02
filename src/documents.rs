@@ -496,17 +496,43 @@ where
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'path' The relative collection path and document id, for example "my_collection/document_id"
-pub fn delete<'a, BEARER>(auth: &'a mut BEARER, path: &str) -> Result<()>
+/// * 'fail_if_not_existing' If true this method will return an error if the document does not exist.
+pub fn delete<'a, BEARER>(
+    auth: &'a mut BEARER,
+    path: &str,
+    fail_if_not_existing: bool,
+) -> Result<()>
 where
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let url = format!(firebase_url!(), auth.projectid(), path);
 
-    Client::new()
+    let query_request = dto::Write {
+        current_document: Some(dto::Precondition {
+            exists: match fail_if_not_existing {
+                true => Some(true),
+                false => None,
+            },
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let mut resp = Client::new()
         .delete(&url)
         .bearer_auth(auth.bearer().to_owned())
+        .json(&query_request)
         .send()?;
 
+    if resp.status() != 200 {
+        return Err(FirebaseError::UnexpectedResponse(
+            "Firestore delete request failed: ",
+            resp.status(),
+            resp.text()?,
+            serde_json::to_string_pretty(&url)?,
+        ));
+    }
+    println!("{} {}", resp.text()?, resp.status());
     Ok({})
 }
 

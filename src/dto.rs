@@ -29,12 +29,17 @@ pub struct BeginTransactionResponse {
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Write {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub delete: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "currentDocument")]
     pub current_document: Option<Precondition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub update: Option<Document>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transform: Option<DocumentTransform>,
     #[serde(rename = "updateMask")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub update_mask: Option<DocumentMask>,
 }
 
@@ -262,7 +267,9 @@ pub struct DocumentsTarget {
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Precondition {
     #[serde(rename = "updateTime")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub update_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exists: Option<bool>,
 }
 

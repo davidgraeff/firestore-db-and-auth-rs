@@ -98,7 +98,7 @@ impl Credentials {
     ///
     /// ```
     /// use firestore_db_and_auth::credentials::Credentials;
-    /// 
+    ///
     /// let mut c : Credentials = serde_json::from_str(include_str!("../firebase-service-account.json")).unwrap();
     /// c.add_jwks_public_keys(serde_json::from_str(include_str!("../service-account-for-tests.jwks")).unwrap());
     /// c.compute_missing_fields().unwrap();

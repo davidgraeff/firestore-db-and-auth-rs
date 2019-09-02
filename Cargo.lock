@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "firestore-db-and-auth"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "biscuit 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
