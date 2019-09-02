@@ -10,8 +10,8 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Check for leftover println
-      run: "[[ $(fgrep -r 'println' src/ | wc -l) -eq 0 ]] || { echo >&2 'Left over println!'; exit 1; }"
+      run: ./ci.sh
     - name: Build
-      run: echo $SERVICE_ACCOUNT_JSON | base64 -d > firebase-service-account.json && cargo build --verbose
+      run: cargo build --features=rocket_support
     - name: Run tests
-      run: echo $SERVICE_ACCOUNT_JSON | base64 -d > firebase-service-account.json && cargo test --verbose
+      run: cargo test
