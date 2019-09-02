@@ -3,4 +3,5 @@ rust:
   - nightly
 cache: cargo
 before_script:
+  - [[ $(fgrep -r "println" src/ | wc -l) -eq 0 ]] || { echo >&2 "Left over println!"; exit 1; }
   - echo $SERVICE_ACCOUNT_JSON > firebase-service-account.json
