@@ -1,4 +1,3 @@
-
 use super::credentials::Credentials;
 use super::errors::FirebaseError;
 use super::sessions;
@@ -8,7 +7,6 @@ pub struct ApiKey(pub sessions::user::Session);
 
 impl<'a, 'r> request::FromRequest<'a, 'r> for ApiKey {
     type Error = FirebaseError;
-
 
     fn from_request(request: &'a request::Request<'r>) -> request::Outcome<Self, Self::Error> {
         let r = request

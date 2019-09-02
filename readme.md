@@ -139,27 +139,32 @@ let mut session = sessions::user::Session::by_access_token(&cred, &access_token)
 ```
 
 The `by_access_token` method will fail if the token is not valid anymore.
-Please note that a session created this way is not able to automatically refresh its access token, because there
-is no refresh_token associated with it.
+Please note that a session created this way is not able to automatically refresh its access token.
+There is no *refresh_token* associated with it.
 
-### About the integrated authentication implementation
+### Firestore Auth: Background information
 
-The `sessions` module of this create allows you to create access tokens for using the Firestore API.
+**JWT**: Firestore Auth makes use of the *OAuth Grant Code Flow* and uses *JWT*s (Json web Tokens)
+as access tokens. Such a token is signed by Google and consists of a few encoded fields including
+a valid-until field. This allows to verify access tokens locally without any database access.
 
-If you use service account credentials and a "service_account" session, internally a JWS (Json Web signature)
-is created. A jws is a fully signed JWT (Java web Token) via the private key of the service account.
+The Firebase API requires an access token, it accepts two types:
 
-Google APIs accept such a JWS as bearer token.
+1. A custom created JWT, signed with the private key of a Google service account
+2. An access token from Firestore Auth, bound to a user (in this crate called "user session")
 
-If you use user sessions via `Session::by_user_id` a custom JWT is generated,
-again signed via the private key of the service account and exchanged via the Firestore Auth API into a
-refresh token and access token tuple (like in the OAuth2 Code Grant flow).
+If you do not have an user session access token, but you need to perform an action
+impersonated, this crate offers `Session::by_user_id`. This will again create a custom, signed JWT,
+like with option 1, but exchanges this JWT for a refresh token and access token tuple.
+The actual database operation will be performed with those tokens.
 
-If you use user sessions via `Session::by_refresh_token` and `Session::by_access_token` the provided token is validated via the public
-keys of the corresponding Google service account (https://www.googleapis.com/service_accounts/v1/jwk/service.account@address).
-The public keys are of course cached the very first time you create a `credentials::Credentials` object.
+About token validation:
 
-**Security related note**: Depending on your SSL setup and if you have host name / certificate verification for `https://www.googleapis.com` enabled, Man-in-the-middle attacks are impossible.
+Validation happens via the public keys of the corresponding Google service account (https://www.googleapis.com/service_accounts/v1/jwk/service.account@address).
+The public keys are downloaded and cached the very first time you create a `credentials::Credentials` object.
+
+To avoid this roundtrip on start it is **strongly** recommended to serialize the credentials object to disk.
+Find more information further down.
 
 ### Use your own authentication implementation
 
@@ -171,7 +176,7 @@ That trait looks like this:
 ```rust
 pub trait FirebaseAuthBearer<'a> {
     fn projectid(&'a self) -> &'a str;
-    fn bearer(&'a mut self) -> &'a str;
+    fn bearer(&'a self) -> &'a str;
 }
 ```
 
@@ -212,27 +217,25 @@ fn hello_not_logged_in<'r>() -> &'r str {
 ## Usage in cloud functions
 
 The start up time is crucial for cloud functions.
+The usual start up procedure includes three IO operations:
 
-The usual start up process includes 
-* downloading the public jwks keys from a Google server,
-* read in the json credentials file,
-* create a service account session by creating a custom jwt token.
+* downloading the two public jwks keys from a Google server,
+* and read in the json credentials file.
 
-This crate ships with a helper tool that creates a binary serialized  `service_acount::Session` (stored in `service_account_session.bin`).
-Head to your directory that contains your `firebase-service-account.json` and execute `cargo run --bin binary_session`.
+Avoid those by embedding the credentials and public key files into your application.
 
-At runtime you avoid any file reads, network calls, jwt creation by using the `from_binary` macro which internally uses `std::include_bytes`.
-The predefined session will be embedded into your executable:
+First download the 2 public key files:
+
+* https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com -> Store as `securetoken.jwks`
+* https://www.googleapis.com/service_accounts/v1/jwk/{your-service-account-email} -> Store as `service-account.jwks`
+
+Create a `Credentials` object like so:
 
 ```rust
-use firestore_db_and_auth::{sessions, from_binary};
-
-let session : sessions::service_account::Session = from_binary!("../../service_account_session.bin");
+let mut c : Credentials = serde_json::from_str(include_str!("firebase-service-account.json"))?
+c.add_jwks_public_keys(serde_json::from_str(include_str!("securetoken.jwks"))?);
+c.add_jwks_public_keys(serde_json::from_str(include_str!("service-account.jwks"))?);
 ```
-Note: The file is located relative to the current source file. 
-
-If you need to call a Firestore API on behalf of a Firebase Auth user via `user::Session`,
-you can at any time access  the `credentials::Credentials` object from that `service_account::Session`.
 
 ## Testing
 
@@ -255,9 +258,8 @@ Maintenance status: Stable
 
 What can be done to make this crate more awesome:
 
-* The communication efficieny can be improved by using gRPC/Protobuf instead of HTTP/Json, which also allows for data streaming.
-* More DTOs (Data transfer objects) and convenience methods should be exposed for the Firebase Auth API.
-  Especially the write/update part has many usecases.
+* Data streaming via gRPC/Protobuf
+* Expose more DTOs (Data transfer objects) and convenience methods.
 * Nice to have: Transactions, batch_get support for Firestore
 
 This library does not have the ambition to mirror the http/gRPC API 1:1.

@@ -22,9 +22,8 @@ pub mod users;
 /// Use the firebase documents API with this auth bearer
 pub trait FirebaseAuthBearer<'a> {
     fn projectid(&'a self) -> &'a str;
-    fn bearer(&'a mut self) -> &'a str;
+    fn bearer(&'a self) -> String;
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -41,7 +40,7 @@ mod tests {
         let b = session.bearer().to_owned();
 
         // Check if cached value is used
-        assert_eq!(session.bearer(), &b);
+        assert_eq!(session.bearer(), b);
 
         let obj = DemoDTO {
             a_string: "abcd".to_owned(),
@@ -147,7 +146,7 @@ mod tests {
 
         let mut count = 0;
         let list_it: documents::List<DemoDTO, _> = documents::list(&mut user_session, "tests");
-        for doc in list_it {
+        for _doc in list_it {
             count += 1;
         }
         assert_eq!(count, 2);

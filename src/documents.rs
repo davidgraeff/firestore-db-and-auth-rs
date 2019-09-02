@@ -21,7 +21,6 @@ macro_rules! firebase_url {
 
 use super::errors::{FirebaseError, Result};
 
-
 use super::dto;
 
 use super::FirebaseAuthBearer;
@@ -259,12 +258,9 @@ where
     for<'b> T: Deserialize<'b>,
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
-     let url = format!(
-        firebase_url_base!(),
-        document_name
-    );
+    let url = format!(firebase_url_base!(), document_name);
 
-     let mut resp = Client::new()
+    let mut resp = Client::new()
         .get(&url)
         .bearer_auth(auth.bearer().to_owned())
         .send()?;
@@ -325,8 +321,10 @@ pub struct List<'a, T, BEARER> {
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'path' The document path / collection; For example "my_collection" or "a/nested/collection"
-pub fn list<'a, T, BEARER>(auth: &'a mut BEARER, path: &str) -> List<'a, T, BEARER> 
-where for<'c> BEARER: FirebaseAuthBearer<'c> {
+pub fn list<'a, T, BEARER>(auth: &'a mut BEARER, path: &str) -> List<'a, T, BEARER>
+where
+    for<'c> BEARER: FirebaseAuthBearer<'c>,
+{
     List {
         url: format!(firebase_url!(), auth.projectid(), path,),
         auth,
@@ -373,7 +371,6 @@ where
         }
 
         if self.documents.len() <= self.current {
-
             let url = match &self.next_page_token {
                 Some(next_page_token) => format!("{}pageToken={}", self.url, next_page_token),
                 None => self.url.clone(),
@@ -406,7 +403,6 @@ where
         return Some(document_to_pod(&doc));
     }
 }
-
 
 ///
 /// Queries the database for specific documents, for example all documents in a collection of the 'type' == "car".
@@ -464,7 +460,7 @@ where
         .json(&query_request)
         .send()?;
 
- if resp.status() != 200 {
+    if resp.status() != 200 {
         return Err(FirebaseError::UnexpectedResponse(
             "Firestore query failed: ",
             resp.status(),
@@ -484,7 +480,7 @@ where
     for value in json.iter() {
         if let Some(ref document) = &value.document {
             if document.fields.is_none() && document.name.is_some() {
-                let doc : T = read_by_name(auth, &document.name.as_ref().unwrap())?;
+                let doc: T = read_by_name(auth, &document.name.as_ref().unwrap())?;
                 dtos.push(doc);
             } else {
                 dtos.push(document_to_pod(document)?);
@@ -574,7 +570,8 @@ mod tests {
         let firebase_doc = pod_to_document(&t)?;
         let map = firebase_doc.fields;
         assert_eq!(
-            map.unwrap().get("integer_test")
+            map.unwrap()
+                .get("integer_test")
                 .expect("a value in the map for integer_test")
                 .integer_value
                 .as_ref()

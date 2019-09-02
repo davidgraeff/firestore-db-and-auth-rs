@@ -1,6 +1,6 @@
 [package]
 name = "firestore-db-and-auth"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["David Gräff <david.graeff@web.de>"]
 edition = "2018"
 license = "MIT"
@@ -11,35 +11,29 @@ categories = ["api-bindings","authentication"]
 maintenance = { status = "passively-maintained" }
 
 [dependencies]
-url  = "2.1.0"
-reqwest = "0.9.20"
-serde_derive = "1.0.99"
-serde = "1.0.99"
-serde_json = "1.0.40"
-chrono = { version = "0.4.7", features = ["serde"] }
-biscuit = "0.3.1"
-ring = "0.16.7"
-untrusted = "0.7.0"
-regex = "1.2.1"
-rustc-serialize = "0.3.24"
-bincode = { version = "1.1.4", optional = true }
+url  = "^2.1"
+reqwest = "^0.9"
+serde_derive = "^1.0"
+serde = "^1.0"
+serde_json = "^1.0"
+chrono = { version = "^0.4", features = ["serde"] }
+biscuit = "^0.3"
+ring = "^0.16"
+untrusted = "^0.7"
+regex = "^1.2"
+rustc-serialize = "^0.3"
 
 [dependencies.rocket]
-version = "0.4.2"
+version = "^0.4"
 default-features = false
 optional = true
 
 [dependencies.rocket_contrib]
-version = "0.4.2"
+version = "^0.4"
 default-features = false
 features = ["json","redis_pool"]
 optional = true
 
 [features]
-default = ["faststart"]
+default = []
 rocket_support = ["rocket","rocket_contrib"]
-faststart = ["bincode"]
-
-[[bin]]
-name = "binary_session"
-required-features = ["faststart"]

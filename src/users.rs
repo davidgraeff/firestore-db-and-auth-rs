@@ -43,7 +43,7 @@ pub struct FirebaseAuthUser {
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct FirebaseAuthUserResponse {
     pub kind: String,
-    pub users: Vec<FirebaseAuthUser>
+    pub users: Vec<FirebaseAuthUser>,
 }
 
 #[allow(non_snake_case)]

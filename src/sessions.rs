@@ -57,8 +57,8 @@ pub mod user {
         fn projectid(&'a self) -> &'a str {
             &self.projectid
         }
-        fn bearer(&'a mut self) -> &'a str {
-            &self.bearer
+        fn bearer(&'a self) -> String {
+            self.bearer.clone()
         }
     }
 
@@ -239,12 +239,12 @@ pub mod user {
             // Check expire time and issued-at time
             let ref claims = token.payload()?.registered;
             if let Some(issued_at) = claims.issued_at.as_ref() {
-                if Utc::now().time() < issued_at.time() {
+                if Utc::now().timestamp_millis() < issued_at.timestamp_millis() {
                     return Err(FirebaseError::Generic("Token has invalid issued_at"));
                 }
             }
             if let Some(expiry) = claims.expiry.as_ref() {
-                if Utc::now().time() > expiry.time() {
+                if Utc::now().timestamp_millis() > expiry.timestamp_millis() {
                     return Err(FirebaseError::Generic("Token expired"));
                 }
             }
@@ -280,7 +280,6 @@ pub mod service_account {
         ClaimsSet, RegisteredClaims, SingleOrMultiple, StringOrUri, JWT,
     };
 
-
     use serde::{Deserialize, Serialize};
     use std::str::FromStr;
     pub type GoogleJWT = JWT<biscuit::Empty, biscuit::Empty>;
@@ -289,6 +288,7 @@ pub mod service_account {
 
     use chrono::{Duration, Utc};
 
+    use std::cell::RefCell;
     use std::ops::Add;
 
     use super::credentials::Credentials;
@@ -298,8 +298,8 @@ pub mod service_account {
     #[derive(Serialize, Deserialize)]
     pub struct Session {
         pub credentials: Credentials,
-        jwt: GoogleJWT,
-        bearer_cache: String,
+        jwt: RefCell<GoogleJWT>,
+        bearer_cache: RefCell<String>,
     }
 
     impl<'a> super::FirebaseAuthBearer<'a> for Session {
@@ -308,10 +308,9 @@ pub mod service_account {
         }
         /// Return the encoded jwt to be used as bearer token. If the jwt
         /// issue_at is older than 50 mins, it will be updated to the current time.
-        ///
-        /// For this to work, you must use a mutable session object
-        fn bearer(&'a mut self) -> &'a str {
-            let ref mut claims = self.jwt.payload_mut().unwrap().registered;
+        fn bearer(&'a self) -> String {
+            let mut jwt = self.jwt.borrow_mut();
+            let ref mut claims = jwt.payload_mut().unwrap().registered;
 
             let now = biscuit::Timestamp::from(Utc::now());
             if let Some(issued_at) = claims.issued_at.as_ref() {
@@ -319,7 +318,7 @@ pub mod service_account {
                 if diff.num_minutes() > 50 {
                     claims.issued_at = Some(now);
                 } else {
-                    return &self.bearer_cache;
+                    return self.bearer_cache.borrow().clone();
                 }
             } else {
                 claims.issued_at = Some(now);
@@ -327,23 +326,16 @@ pub mod service_account {
             let signing_secret = Secret::RsaKeyPair(std::sync::Arc::new(
                 self.credentials.create_rsa_key_pair().unwrap(),
             ));
-            self.bearer_cache = self
-                .jwt
-                .encode(&signing_secret)
-                .unwrap()
-                .unwrap_encoded()
-                .encode();
-            return &self.bearer_cache;
+            self.bearer_cache.swap(&RefCell::new(
+                self.jwt
+                    .borrow()
+                    .encode(&signing_secret)
+                    .unwrap()
+                    .unwrap_encoded()
+                    .encode(),
+            ));
+            return self.bearer_cache.borrow().clone();
         }
-    }
-
-    #[cfg(feature = "faststart")]
-    #[macro_export]
-    macro_rules! from_binary {
-        ($filename:expr) => {{
-            let bytes = include_bytes!($filename);
-            bincode::deserialize(bytes).unwrap()
-        };};
     }
 
     impl Session {
@@ -381,23 +373,10 @@ pub mod service_account {
             let signing_secret =
                 Secret::RsaKeyPair(std::sync::Arc::new(credentials.create_rsa_key_pair()?));
             Ok(Session {
-                bearer_cache: jwt.encode(&signing_secret)?.unwrap_encoded().encode(),
-                jwt: jwt,
+                bearer_cache: RefCell::new(jwt.encode(&signing_secret)?.unwrap_encoded().encode()),
+                jwt: RefCell::new(jwt),
                 credentials: credentials,
             })
-        }
-
-        pub fn from_binary(binary_session_file: &str) -> Result<Session> {
-            use std::fs::File;
-            use std::io::prelude::*;
-            use std::path::Path;
-            let mut target = File::open(&Path::new(binary_session_file))?;
-            let mut data = Vec::new();
-            target.read_to_end(&mut data)?;
-
-            let mut credentials: Credentials = bincode::deserialize(&data)?;
-            credentials.compute_missing_fields()?;
-            Session::new(credentials)
         }
     }
 }
