@@ -12,6 +12,6 @@ jobs:
     - name: Check for leftover println
       run: [[ $(fgrep -r "println" src/ | wc -l) -eq 0 ]] || { echo >&2 "Left over println!"; exit 1; }
     - name: Build
-      run: echo $SERVICE_ACCOUNT_JSON > firebase-service-account.json && cargo build --verbose
+      run: echo $SERVICE_ACCOUNT_JSON | base64 -d > firebase-service-account.json && cargo build --verbose
     - name: Run tests
-      run: echo $SERVICE_ACCOUNT_JSON > firebase-service-account.json && cargo test --verbose
+      run: echo $SERVICE_ACCOUNT_JSON | base64 -d > firebase-service-account.json && cargo test --verbose
