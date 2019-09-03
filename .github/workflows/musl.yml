@@ -21,4 +21,4 @@ jobs:
         SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
       run: ./ci.sh
     - name: Build and Test
-      run: cargo test --features rustls-tls --no-default-features --target x86_64-unknown-linux-musl
+      run: cargo test --features rustls-tls --no-default-features
