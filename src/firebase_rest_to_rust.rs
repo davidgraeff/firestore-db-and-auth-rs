@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use super::dto;
-use super::errors::Result;
+use super::errors::{FirebaseError, Result};
 
 #[derive(Serialize, Deserialize)]
 struct Wrapper {
@@ -133,7 +133,10 @@ where
     };
 
     let v = serde_json::to_value(r)?;
-    let r: T = serde_json::from_value(v)?;
+    let r: T = serde_json::from_value(v).map_err(|e| FirebaseError::Ser {
+        doc: document.name.to_owned(),
+        ser: e,
+    })?;
     Ok(r)
 }
 

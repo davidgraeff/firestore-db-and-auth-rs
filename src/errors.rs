@@ -17,7 +17,10 @@ pub enum FirebaseError {
     UnexpectedResponse(&'static str, reqwest::StatusCode, String, String),
     Request(reqwest::Error),
     JWT(biscuit::errors::Error),
-    Ser(serde_json::Error),
+    Ser {
+        doc: Option<String>,
+        ser: serde_json::Error,
+    },
     RSA(ring::error::KeyRejected),
     IO(std::io::Error),
 }
@@ -35,7 +38,10 @@ impl std::convert::From<ring::error::KeyRejected> for FirebaseError {
 }
 impl std::convert::From<serde_json::Error> for FirebaseError {
     fn from(error: serde_json::Error) -> Self {
-        FirebaseError::Ser(error)
+        FirebaseError::Ser {
+            doc: None,
+            ser: error,
+        }
     }
 }
 
@@ -66,7 +72,13 @@ impl fmt::Display for FirebaseError {
             FirebaseError::RSA(ref e) => e.fmt(f),
             FirebaseError::IO(ref e) => e.fmt(f),
             //  FirebaseError::NoneError(ref e) => e.fmt(f),
-            FirebaseError::Ser(ref e) => e.fmt(f),
+            FirebaseError::Ser { ref doc, ref ser } => {
+                if let Some(doc) = doc {
+                    writeln!(f, "{} in document {}", ser, doc)
+                } else {
+                    ser.fmt(f)
+                }
+            }
         }
     }
 }
@@ -81,7 +93,7 @@ impl error::Error for FirebaseError {
             FirebaseError::RSA(_) => None,
             FirebaseError::IO(ref e) => Some(e),
             //  FirebaseError::NoneError(ref e) => Some(e),
-            FirebaseError::Ser(ref e) => Some(e),
+            FirebaseError::Ser { ref ser, .. } => Some(ser),
         }
     }
 }
