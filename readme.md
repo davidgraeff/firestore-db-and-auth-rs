@@ -22,6 +22,15 @@ Usecases:
 Limitations:
 * Listening to document / collection changes is not yet possible
 
+### Cargo features
+
+* `rocket_support`: Enables the rocket guard.
+  Only Firestore Auth authorized requests can pass this guard.
+  This feature requires rust nightly, because Rocket itself requires nightly.
+* `rustls-tls`: Use rustls instead of native-tls (openssl on Linux).
+  If you want to compile this crate for musl, this is what you want.
+  Don't forget to disable the default features with ` --no-default-features`.
+
 ### Document operations
 
 This crate operates on DTOs (Data transfer objects) for type-safe operations on your Firestore DB.

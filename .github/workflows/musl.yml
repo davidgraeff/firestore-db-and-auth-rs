@@ -1,4 +1,4 @@
-name: Integration
+name: StaticLibMusl
 
 on: [push]
 
@@ -8,11 +8,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest]
         rust: [stable]
 
     steps:
-    - uses: hecrj/setup-rust-action@master
+    - uses: juankaram/rust-musl-action@master
       with:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@master
@@ -20,5 +20,5 @@ jobs:
       env:
         SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
       run: ./ci.sh
-    - name: Build And Test
-      run: cargo test
+    - name: Build and Test
+      run: cargo test --features rustls-tls --no-default-features --target x86_64-unknown-linux-musl

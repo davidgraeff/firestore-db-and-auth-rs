@@ -12,7 +12,7 @@ maintenance = { status = "passively-maintained" }
 
 [dependencies]
 url  = "^2.1"
-reqwest = "^0.9"
+reqwest = { version ="^0.9", default-features = false }
 serde_derive = "^1.0"
 serde = "^1.0"
 serde_json = "^1.0"
@@ -28,12 +28,8 @@ version = "^0.4"
 default-features = false
 optional = true
 
-[dependencies.rocket_contrib]
-version = "^0.4"
-default-features = false
-features = ["json","redis_pool"]
-optional = true
-
 [features]
-default = []
-rocket_support = ["rocket","rocket_contrib"]
+default = ["default-tls"]
+rocket_support = ["rocket"]
+rustls-tls = ["reqwest/rustls-tls"]
+default-tls = ["reqwest/default-tls"]

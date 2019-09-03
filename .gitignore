@@ -2,3 +2,4 @@ firebase-service-account.json
 refresh-token-for-tests.txt
 target/
 Cargo.lock
+.idea
