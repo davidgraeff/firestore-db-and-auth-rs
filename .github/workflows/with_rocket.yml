@@ -1,6 +1,9 @@
 name: With Rocket
 
-on: [push]
+on:
+  push:
+    paths:
+      - 'src/*'
 
 jobs:
   build:
