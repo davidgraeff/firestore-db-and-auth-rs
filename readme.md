@@ -1,6 +1,6 @@
 # Firestore API and Auth
 
-<img align="right" src="./doc/logo.png" />
+<img alt="Firestore Logo, Copyright by Google" align="right" src="https://github.com/davidgraeff/firestore-db-and-auth-rs/raw/master/doc/logo.png" />
 
 [![Build Status](https://github.com/davidgraeff/firestore-db-and-auth-rs/workflows/Integration/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions)
 [![Build Status](https://github.com/davidgraeff/firestore-db-and-auth-rs/workflows/With%20Rocket/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions)
@@ -262,7 +262,12 @@ If the tests run through with your "firebase-service-account.json" file, you are
 
 Start test runs with `cargo test` as usual.
 
-## Further development
+## Documentation
+
+See https://docs.rs/firestore-db-and-auth
+Build locally with `cargo +nightly doc --features external_doc,rocket_support`
+
+## Future development
 
 Maintenance status: Stable
 

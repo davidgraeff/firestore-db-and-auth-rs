@@ -1,27 +1,35 @@
-//! # Firestore document access and Firebase Auth
-//!
-//! This crate allows you to easily access Google Firestore documents
-//! and handles all the finicky authentication details for you.
+#![cfg_attr(feature = "external_doc", feature(external_doc))]
+#![cfg_attr(feature = "external_doc", doc(include = "../readme.md"))]
 
 extern crate regex;
 extern crate ring;
 extern crate untrusted;
 
-#[cfg(feature = "faststart")]
-extern crate bincode;
-
 pub mod credentials;
-pub mod errors;
-pub mod sessions;
-
 pub mod documents;
+pub mod errors;
+pub mod firebase_rest_to_rust;
+pub mod sessions;
+pub mod users;
 
 mod dto;
+
+#[cfg(feature = "rocket_support")]
 pub mod rocket;
-pub mod users;
-/// Use the firebase documents API with this auth bearer
+
+// Forward declarations
+pub use credentials::Credentials;
+
+/// Authentication trait.
+///
+/// This trait is implemented by [`crate::sessions`], but you do not need those for using the Firestore API of this crate.
+/// Firestore document methods in [`crate::documents`] expect an object that implements the `FirebaseAuthBearer` trait.
+///
+/// Implement this trait for your own data structure and provide the Firestore project id and a valid access token.
 pub trait FirebaseAuthBearer<'a> {
+    /// Return the project ID. This is required for the firebase REST API.
     fn projectid(&'a self) -> &'a str;
+    /// An access token, preferably valid.
     fn bearer(&'a self) -> String;
 }
 

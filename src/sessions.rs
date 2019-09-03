@@ -1,3 +1,7 @@
+//! # Authentication Session - Contains non-persistent access tokens
+//!
+//! A session can be either for a service-account or impersonated via a firebase auth user id.
+
 use super::credentials;
 use super::errors;
 

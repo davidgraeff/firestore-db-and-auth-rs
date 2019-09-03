@@ -1,3 +1,7 @@
+//! # Credentials for accessing the Firebase REST API
+//! This module contains the [`crate::credentials::Credentials`] type, used by [`crate::sessions`] to create and maintain
+//! authentication tokens for accessing the Firebase REST API.
+
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -28,8 +32,10 @@ pub struct JWKSetDTO {
 ///
 /// The api_key is necessary for interacting with the Firestore REST API.
 ///
-/// The private key is used for signing java web tokens (jwk).
-/// Those can be exchanged into a refresh and access token.
+/// Internals:
+///
+/// The private key is used for signing JWTs (javascript web token).
+/// A signed jwt, encoded as a base64 string, can be exchanged into a refresh and access token.
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Credentials {
     pub project_id: String,
@@ -79,10 +85,11 @@ impl Credentials {
         ring::signature::RsaKeyPair::from_pkcs8(&self.private_key_der).map_err(|e| e.into())
     }
 
-    /// Create a Crentials object of a google-service-account json file.
+    /// Create a [`Credentials`] object by reading and parsing a google-service-account json file.
     ///
-    /// The corresponding jwks (public keys) for the given service account as well as the
-    /// "securetoken@system.gserviceaccount.com" are downloaded if you use this method.
+    /// The public keys to verify generated tokens will be downloaded, for the given service account as well as
+    /// for "securetoken@system.gserviceaccount.com".
+    /// Do not use this method if this is not desired, see [`Credentials::add_jwks_public_keys`] for an alternative.
     pub fn from_file(credential_file: &str) -> errors::Result<Self> {
         let mut f = File::open(credential_file)?;
         let mut buffer = Vec::new();
@@ -92,7 +99,7 @@ impl Credentials {
         Ok(credentials)
     }
 
-    /// Add a jwks file to verify Google access tokens
+    /// Add a jwks file to verify Google access tokens.
     ///
     /// Example:
     ///
@@ -114,9 +121,11 @@ impl Credentials {
         }
     }
 
-    /// Call this method after deserializing.
+    /// This method will compute an alternative representation of the private key and must be
+    /// called before using any of the session methods.
+    /// This is automatically invoked if you use [`Credentials::from_file`].
     ///
-    /// If you haven't called [add_jwks_public_keys] before and manually added public keys,
+    /// If you haven't called [`Credentials::add_jwks_public_keys`] to manually add public keys,
     /// this method will download one for your google service account and one for the oauth related
     /// securetoken@system.gserviceaccount.com service account.
     pub fn compute_missing_fields(&mut self) -> errors::Result<()> {

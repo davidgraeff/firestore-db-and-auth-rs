@@ -12,9 +12,7 @@ jobs:
         rust: [stable]
 
     steps:
-    - uses: juankaram/rust-musl-action@master
-      with:
-        rust-version: ${{ matrix.rust }}
+    - uses: davidgraeff/rust-musl-action@master
     - uses: actions/checkout@master
     - name: Check for leftover println
       env:

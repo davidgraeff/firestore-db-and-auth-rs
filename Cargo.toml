@@ -1,6 +1,6 @@
 [package]
 name = "firestore-db-and-auth"
-version = "0.2.1"
+version = "0.2.4"
 authors = ["David Gräff <david.graeff@web.de>"]
 edition = "2018"
 license = "MIT"
@@ -9,6 +9,7 @@ readme = "readme.md"
 keywords = ["firestore", "auth"]
 categories = ["api-bindings","authentication"]
 maintenance = { status = "passively-maintained" }
+repository = "https://github.com/davidgraeff/firestore-db-and-auth-rs"
 
 [dependencies]
 url  = "^2.1"
@@ -28,8 +29,13 @@ version = "^0.4"
 default-features = false
 optional = true
 
+# Render the readme file on doc.rs
+[package.metadata.docs.rs]
+features = [ "external_doc", "rocket_support" ]
+
 [features]
 default = ["default-tls"]
 rocket_support = ["rocket"]
 rustls-tls = ["reqwest/rustls-tls"]
 default-tls = ["reqwest/default-tls"]
+external_doc = []

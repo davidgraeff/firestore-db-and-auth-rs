@@ -1,10 +1,16 @@
+//! # Error and Result Type
+
 use std::error;
 use std::fmt;
 
 use reqwest;
 
+/// A result type that uses [`FirebaseError`] as an error type
 pub type Result<T> = std::result::Result<T, FirebaseError>;
 
+/// The main error type used throughout this crate. It wraps / converts from a few other error
+/// types and implements [error::Error] so that you can use it in any situation where the
+/// standard error type is expected.
 #[derive(Debug)]
 pub enum FirebaseError {
     Generic(&'static str),
@@ -13,7 +19,6 @@ pub enum FirebaseError {
     JWT(biscuit::errors::Error),
     Ser(serde_json::Error),
     RSA(ring::error::KeyRejected),
-    //NoneError(std::option::NoneError),
     IO(std::io::Error),
 }
 
