@@ -25,7 +25,7 @@ macro_rules! firebase_url {
 }
 
 use super::dto;
-use super::errors::{FirebaseError, Result};
+use super::errors::{extract_google_api_error, FirebaseError, Result};
 use super::firebase_rest_to_rust::{document_to_pod, pod_to_document};
 use super::FirebaseAuthBearer;
 
@@ -53,7 +53,7 @@ pub struct WriteResult {
 /// * 'document_id' The document id. Make sure that you do not include the document id to the path argument.
 /// * 'document' The document
 pub fn write<'a, T, BEARER>(
-    auth: &'a mut BEARER,
+    auth: &'a BEARER,
     path: &str,
     document_id: Option<&str>,
     document: &T,
@@ -85,14 +85,8 @@ where
         .json(&firebase_document)
         .send()?;
 
-    if resp.status() != 200 {
-        return Err(FirebaseError::UnexpectedResponse(
-            "Firestore write failed: ",
-            resp.status(),
-            resp.text()?,
-            serde_json::to_string_pretty(&firebase_document)?,
-        ));
-    }
+    extract_google_api_error(&mut resp, || document_id.or(Some("")).unwrap().to_owned())?;
+
     let result_document: dto::Document = resp.json()?;
     let doc_path = result_document.name.ok_or_else(|| {
         FirebaseError::Generic("Resulting document does not contain a 'name' field")
@@ -140,7 +134,7 @@ where
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'document_name' The document path / collection and document id; For example "projects/my_project/databases/(default)/documents/tests/test"
-pub fn read_by_name<'a, T, BEARER>(auth: &'a mut BEARER, document_name: &str) -> Result<T>
+pub fn read_by_name<'a, T, BEARER>(auth: &'a BEARER, document_name: &str) -> Result<T>
 where
     for<'b> T: Deserialize<'b>,
     for<'c> BEARER: FirebaseAuthBearer<'c>,
@@ -152,14 +146,7 @@ where
         .bearer_auth(auth.bearer().to_owned())
         .send()?;
 
-    if resp.status() != 200 {
-        return Err(FirebaseError::UnexpectedResponse(
-            "Firestore read failed: ",
-            resp.status(),
-            resp.text()?,
-            serde_json::to_string_pretty(&url)?,
-        ));
-    }
+    extract_google_api_error(&mut resp, || document_name.to_owned())?;
 
     let json: dto::Document = resp.json()?;
     Ok(document_to_pod(&json)?)
@@ -172,7 +159,7 @@ where
 /// * 'auth' The authentication token
 /// * 'path' The document path / collection; For example "my_collection" or "a/nested/collection"
 /// * 'document_id' The document id. Make sure that you do not include the document id to the path argument.
-pub fn read<'a, T, BEARER>(auth: &'a mut BEARER, path: &str, document_id: &str) -> Result<T>
+pub fn read<'a, T, BEARER>(auth: &'a BEARER, path: &str, document_id: &str) -> Result<T>
 where
     for<'b> T: Deserialize<'b>,
     for<'c> BEARER: FirebaseAuthBearer<'c>,
@@ -191,12 +178,13 @@ where
 /// Please note that this API acts as an iterator of same-like documents.
 /// This type is not suitable if you want to list documents of different types.
 pub struct List<'a, T, BEARER> {
-    auth: &'a mut BEARER,
+    auth: &'a BEARER,
     next_page_token: Option<String>,
     documents: Vec<dto::Document>,
     current: usize,
     done: bool,
     url: String,
+    collection_id: String,
     phantom: std::marker::PhantomData<T>,
 }
 
@@ -207,39 +195,34 @@ pub struct List<'a, T, BEARER> {
 ///
 /// ## Arguments
 /// * 'auth' The authentication token
-/// * 'path' The document path / collection; For example "my_collection" or "a/nested/collection"
-pub fn list<'a, T, BEARER>(auth: &'a mut BEARER, path: &str) -> List<'a, T, BEARER>
+/// * 'collection_id' The document path / collection; For example "my_collection" or "a/nested/collection"
+pub fn list<'a, T, BEARER>(auth: &'a BEARER, collection_id: String) -> List<'a, T, BEARER>
 where
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     List {
-        url: format!(firebase_url!(), auth.projectid(), path,),
+        url: format!(firebase_url!(), auth.projectid(), collection_id),
         auth,
         next_page_token: None,
         documents: vec![],
         current: 0,
         done: false,
+        collection_id,
         phantom: std::marker::PhantomData,
     }
 }
 
 fn get_new_data<'a>(
+    collection_id: &str,
     url: &str,
-    auth: &'a mut dyn FirebaseAuthBearer<'a>,
+    auth: &'a dyn FirebaseAuthBearer<'a>,
 ) -> Result<dto::ListDocumentsResponse> {
     let mut resp = Client::new()
         .get(url)
         .bearer_auth(auth.bearer().to_owned())
         .send()?;
 
-    if resp.status() != 200 {
-        return Err(FirebaseError::UnexpectedResponse(
-            "Firestore read failed: ",
-            resp.status(),
-            resp.text()?,
-            serde_json::to_string_pretty(&url)?,
-        ));
-    }
+    extract_google_api_error(&mut resp, || collection_id.to_owned())?;
 
     let json: dto::ListDocumentsResponse = resp.json()?;
     Ok(json)
@@ -263,7 +246,7 @@ where
                 None => self.url.clone(),
             };
 
-            let result = get_new_data(&url, self.auth);
+            let result = get_new_data(&self.collection_id, &url, self.auth);
             match result {
                 Err(e) => {
                     self.done = true;
@@ -287,7 +270,7 @@ where
             self.done = true;
         }
 
-        return Some(document_to_pod(&doc));
+        Some(document_to_pod(&doc))
     }
 }
 
@@ -304,7 +287,7 @@ where
 /// * 'operator' The query operator. For example "EQUAL".
 /// * 'field' The query / filter field. For example "type".
 pub fn query<'a, T, BEARER>(
-    auth: &'a mut BEARER,
+    auth: &'a BEARER,
     collectionid: &str,
     value: &str,
     operator: dto::FieldOperator,
@@ -347,14 +330,7 @@ where
         .json(&query_request)
         .send()?;
 
-    if resp.status() != 200 {
-        return Err(FirebaseError::UnexpectedResponse(
-            "Firestore query failed: ",
-            resp.status(),
-            resp.text()?,
-            serde_json::to_string_pretty(&url)?,
-        ));
-    }
+    extract_google_api_error(&mut resp, || collectionid.to_owned())?;
 
     let json: Option<Vec<dto::RunQueryResponse>> = resp.json()?;
 
@@ -385,7 +361,7 @@ where
 /// * 'path' The relative collection path and document id, for example "my_collection/document_id"
 /// * 'fail_if_not_existing' If true this method will return an error if the document does not exist.
 pub fn delete<'a, BEARER>(
-    auth: &'a mut BEARER,
+    auth: &'a BEARER,
     path: &str,
     fail_if_not_existing: bool,
 ) -> Result<()>
@@ -411,14 +387,7 @@ where
         .json(&query_request)
         .send()?;
 
-    if resp.status() != 200 {
-        return Err(FirebaseError::UnexpectedResponse(
-            "Firestore delete request failed: ",
-            resp.status(),
-            resp.text()?,
-            serde_json::to_string_pretty(&url)?,
-        ));
-    }
+    extract_google_api_error(&mut resp, || path.to_owned())?;
 
     Ok({})
 }

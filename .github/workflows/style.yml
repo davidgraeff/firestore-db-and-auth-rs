@@ -1,0 +1,16 @@
+name: Code Style
+
+on:
+  pull_request:
+  push:
+    paths:
+      - 'src/*'
+
+jobs:
+  build:
+
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@master
+      - name: Check for leftover println
+        run: ./test/left_over_println.sh

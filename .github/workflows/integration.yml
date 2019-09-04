@@ -20,11 +20,11 @@ jobs:
       with:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@master
-    - name: Check for leftover println
+    - name: Extract Test Credentials
       if: matrix.os != 'windows-latest'
       env:
         SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-      run: ./ci.sh
+      run: ./tests/extract_test_credentials.sh
     - name: Build And Test
       if: matrix.os != 'windows-latest'
       run: cargo test

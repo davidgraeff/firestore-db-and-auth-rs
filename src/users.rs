@@ -2,17 +2,12 @@
 //!
 //! Retrieve firebase user information
 
-macro_rules! firebase_auth_url {
-    () => {
-        "https://www.googleapis.com/identitytoolkit/v3/relyingparty/{}?key={}"
-    };
-}
+use super::errors::{extract_google_api_error, Result};
 
-use super::errors::{FirebaseError, Result};
-
-use super::sessions::user::Session;
+use super::sessions::user;
 use serde::{Deserialize, Serialize};
 
+use crate::FirebaseAuthBearer;
 use reqwest::Client;
 
 pub trait DocumentPath<'a> {
@@ -67,35 +62,64 @@ struct UserRequest {
     pub idToken: String,
 }
 
-/// Retrieve information about the firebase auth user associated with the given session
-pub fn userinfo(auth: &Session) -> Result<FirebaseAuthUserResponse> {
-    let url = format!(firebase_auth_url!(), "getAccountInfo", auth.api_key);
-
-    let request = UserRequest {
-        idToken: auth.bearer.to_owned(),
-    };
-
-    let mut resp = Client::new().post(&url).json(&request).send()?;
-
-    if resp.status() != 200 {
-        return Err(FirebaseError::UnexpectedResponse(
-            "User info: ",
-            resp.status(),
-            resp.text()?,
-            serde_json::to_string_pretty(&request)?,
-        ));
+impl UserRequest {
+    fn new(id_token: String) -> UserRequest {
+        UserRequest { idToken: id_token }
     }
+}
+
+#[inline]
+fn firebase_auth_url(v: &str, v2: &str) -> String {
+    format!(
+        "https://www.googleapis.com/identitytoolkit/v3/relyingparty/{}?key={}",
+        v, v2
+    )
+}
+
+#[inline]
+fn user_info_internal(
+    auth: String,
+    api_key: &str,
+    firebase_user_id: &str,
+) -> Result<FirebaseAuthUserResponse> {
+    let url = firebase_auth_url("getAccountInfo", api_key);
+
+    let mut resp = Client::new()
+        .post(&url)
+        .json(&UserRequest::new(auth))
+        .send()?;
+
+    extract_google_api_error(&mut resp, || firebase_user_id.to_owned())?;
 
     Ok(resp.json()?)
 }
 
-/// Removes the firebase auth user associated with the given session
-pub fn userremove(auth: &Session) -> Result<()> {
-    let url = format!(firebase_auth_url!(), "deleteAccount", auth.api_key);
-    Client::new()
+/// Retrieve information about the firebase auth user associated with the given user session
+///
+/// Error codes:
+/// - INVALID_ID_TOKEN
+/// - USER_NOT_FOUND
+pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
+    user_info_internal(session.bearer(), &session.api_key, &session.userid)
+}
+
+#[inline]
+fn user_remove_internal(auth: String, api_key: &str, firebase_user_id: &str) -> Result<()> {
+    let url = firebase_auth_url("deleteAccount", api_key);
+    let mut resp = Client::new()
         .post(&url)
-        .bearer_auth(auth.bearer.to_owned())
+        .json(&UserRequest::new(auth))
         .send()?;
 
+    extract_google_api_error(&mut resp, || firebase_user_id.to_owned())?;
     Ok({})
+}
+
+/// Removes the firebase auth user associated with the given user session
+///
+/// Error codes:
+/// - INVALID_ID_TOKEN
+/// - USER_NOT_FOUND
+pub fn user_remove(session: &user::Session) -> Result<()> {
+    user_remove_internal(session.bearer(), &session.api_key, &session.userid)
 }

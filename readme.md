@@ -29,7 +29,7 @@ Limitations:
   This feature requires rust nightly, because Rocket itself requires nightly.
 * `rustls-tls`: Use rustls instead of native-tls (openssl on Linux).
   If you want to compile this crate for musl, this is what you want.
-  Don't forget to disable the default features with ` --no-default-features`.
+  Don't forget to disable the default features with `--no-default-features`.
 
 ### Document operations
 
@@ -56,7 +56,7 @@ let obj = DemoDTO {
 /// In either way a document is created or updated (overwritten).
 /// 
 /// The method will return document metadata (including a possible generated document id)
-let result = documents::write(&mut session, "tests", Some("service_test"), &obj)?;
+let result = documents::write(&session, "tests", Some("service_test"), &obj)?;
 
 println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time, result.updated_time);
 ```
@@ -64,14 +64,14 @@ println!("id: {}, created: {}, updated: {}", result.document_id, result.create_t
 Read the document with the id "service_test" from the Firestore "tests" collection:
 
 ```rust
-let obj : DemoDTO = documents::read(&mut session, "tests", "service_test")?;
+let obj : DemoDTO = documents::read(&session, "tests", "service_test")?;
 ```
 
 For listing all documents of the "tests" collection you want to use the `List` struct which implements the `Iterator` trait.
 It will hide the complexity of the paging API and fetches new documents when necessary:
 
 ```rust
-let values: documents::List<DemoDTO, _> = documents::list(&mut session, "tests");
+let values: documents::List<DemoDTO, _> = documents::list(&session, "tests");
 for doc_result in values {
     // The document is wrapped in a Result<> because fetching new data could have failed
     let doc = doc_result?;
@@ -86,11 +86,32 @@ For quering the database you would use the `query` method.
 In the following example the collection "tests" is queried for document(s) with the "id" field equal to "Sam Weiss".
 
 ```rust
-let objs : Vec<DemoDTO> = documents::query(&mut session, "tests", "Sam Weiss", dto::FieldOperator::EQUAL, "id")?;
+let objs : Vec<DemoDTO> = documents::query(&session, "tests", "Sam Weiss", dto::FieldOperator::EQUAL, "id")?;
 ```
 
 *Note:* The query method returns a vector, because a query potentially returns multiple matching documents.
 
+### Error handling
+
+The returned `Result` will have a `FirebaseError` set in any error case.
+This custom error type wraps all possible errors (IO, Reqwest, JWT errors etc)
+and Google REST API errors. If you want to specifically check for an API error,
+you could do so:
+
+```rust
+let r = documents::delete(&session, "tests/non_existing", true);
+if let Err(e) = r.err() {
+    if let FirebaseError::APIError(code, message, context) = e {
+        assert_eq!(code, 404);
+        assert!(message.contains("No document to update"));
+        assert_eq!(context, "tests/non_existing");
+    }
+}
+```
+
+The code is numeric, the message is what the Google server returned as message.
+The context string depends on the called method.
+It may me the collection or document id or any other context information.
 
 ### Document access via service account
 
@@ -152,84 +173,13 @@ The `by_access_token` method will fail if the token is not valid anymore.
 Please note that a session created this way is not able to automatically refresh its access token.
 There is no *refresh_token* associated with it.
 
-### Firestore Auth: Background information
-
-**JWT**: Firestore Auth makes use of the *OAuth Grant Code Flow* and uses *JWT*s (Json web Tokens)
-as access tokens. Such a token is signed by Google and consists of a few encoded fields including
-a valid-until field. This allows to verify access tokens locally without any database access.
-
-The Firebase API requires an access token, it accepts two types:
-
-1. A custom created JWT, signed with the private key of a Google service account
-2. An access token from Firestore Auth, bound to a user (in this crate called "user session")
-
-If you do not have an user session access token, but you need to perform an action
-impersonated, this crate offers `Session::by_user_id`. This will again create a custom, signed JWT,
-like with option 1, but exchanges this JWT for a refresh token and access token tuple.
-The actual database operation will be performed with those tokens.
-
-About token validation:
-
-Validation happens via the public keys of the corresponding Google service account (https://www.googleapis.com/service_accounts/v1/jwk/service.account@address).
-The public keys are downloaded and cached the very first time you create a `credentials::Credentials` object.
-
-To avoid this roundtrip on start it is **strongly** recommended to serialize the credentials object to disk.
-Find more information further down.
-
-### Use your own authentication implementation
-
-You do not need the `sessions` module for using the Firestore API of this crate.
-All Firestore methods in `documents` expect an object that implements the `FirebaseAuthBearer` trait.
-
-That trait looks like this:
-
-```rust
-pub trait FirebaseAuthBearer<'a> {
-    fn projectid(&'a self) -> &'a str;
-    fn bearer(&'a self) -> &'a str;
-}
-```
-
-Just implement this trait for your own data structure and provide the Firestore project id and a valid access token.
-
-### Http Rocket Server integration
-
-Because the `sessions` module of this crate is already able to verify access tokens,
-it was not much more work to turn this into a Rocket 0.4+ Guard.
-
-The implemented Guard (enabled by the feature "rocket_support") allows access to http paths
-if the provided http "Authorization" header contains a valid "Bearer" token.
-The above mentioned validations on the token are performed.
-
-Example usage:
-
-```rust
-use firestore_db_and_auth::{credentials, sessions::service_account, rocket::guard::ApiKey};
-
-fn main() {
-    let credentials = credentials::Credentials::from_file("firebase-service-account.json").unwrap();
-    rocket::ignite().manage(credentials).mount("/", routes![hello, hello_not_logged_in]).launch();
-}
-
-/// And an example route could be:
-#[get("/hello")]
-fn hello<'r>(_api_key: ApiKey,) -> &'r str {
-    // ApiKey is a single value tuple with a sessions::user::Session object inside
-    "you are logged in"
-}
-
-#[get("/hello")]
-fn hello_not_logged_in<'r>() -> &'r str {
-    "you are not logged in"
-}
-```
 
 ## Usage in cloud functions
 
 The start up time is crucial for cloud functions.
 The usual start up procedure includes three IO operations:
 
-* downloading the two public jwks keys from a Google server,
+* downloading two public jwks keys from a Google server,
 * and read in the json credentials file.
 
 Avoid those by embedding the credentials and public key files into your application.
@@ -242,40 +192,41 @@ First download the 2 public key files:
 Create a `Credentials` object like so:
 
 ```rust
-let mut c : Credentials = serde_json::from_str(include_str!("firebase-service-account.json"))?
-c.add_jwks_public_keys(serde_json::from_str(include_str!("securetoken.jwks"))?);
-c.add_jwks_public_keys(serde_json::from_str(include_str!("service-account.jwks"))?);
+use firestore_db_and_auth::credentials::Credentials;
+let c = Credentials::new(include_str!("firebase-service-account.json"),
+                         &[include_str!("securetoken.jwks"), include_str!("service-account.jwks")])?;
 ```
+
+### More information
+
+* [Firestore Auth: Background information](/doc/auth_background.md)
+* [Use your own authentication implementation](/doc/own_auth.md)
+* [Http Rocket Server integration](/doc/rocket_integration.md)
+* Build the documentation locally with `cargo +nightly doc --features external_doc,rocket_support`
 
 ## Testing
 
-To perform a full integration test, you need a valid "firebase-service-account.json" file.
-The tests will create a Firebase user with the ID "Io2cPph06rUWM3ABcIHguR3CIw6v1" and write and read a document to/from "tests/test".
-
-If you are using firebase rules (recommended!), please ensure that the mentioned user id has access to the "tests" collection.
-
-A refresh and access token is generated.
-The refresh token is stored in "refresh-token-for-tests.txt" and will be reused for further tests.
-The reason being that Google allows only about [50 simultaneous refresh tokens at any time](https://developers.google.com/identity/protocols/OAuth2#expiration), so we do not want to create a new one each test run.
-
-If the tests run through with your "firebase-service-account.json" file, you are correctly setup and ready to use this library.
-
-Start test runs with `cargo test` as usual.
-
-## Documentation
-
-See https://docs.rs/firestore-db-and-auth
-Build locally with `cargo +nightly doc --features external_doc,rocket_support`
+To perform a full integration test (`cargo test`), you need a valid "firebase-service-account.json" file.
+The tests expect a Firebase user with the ID given in `tests/test_user_id.txt` to exist.
+[More Information](/doc/integration_tests.md)
 
 ## Future development
 
-Maintenance status: Stable
-
-What can be done to make this crate more awesome:
-
-* Data streaming via gRPC/Protobuf
-* Expose more DTOs (Data transfer objects) and convenience methods.
-* Nice to have: Transactions, batch_get support for Firestore
+Maintenance status: In Development
 
 This library does not have the ambition to mirror the http/gRPC API 1:1.
 There are auto-generated libraries for this purpose.
+
+#### Async vs Sync
+
+This crate uses reqwest as http client.
+reqwest itself will soon have picked up full support for Rusts async+await features.
+
+All that is left to do here then is to depend on Rust 1.39 and add an "async fn" variant that calls
+and awaits reqwest for each existing method.
+
+#### What can be done to make this crate more awesome
+
+* Data streaming via gRPC/Protobuf
+* Nice to have: Transactions, batch_get support for Firestore
+

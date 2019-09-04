@@ -1,6 +1,6 @@
 [package]
 name = "firestore-db-and-auth"
-version = "0.2.4"
+version = "0.3.0"
 authors = ["David Gräff <david.graeff@web.de>"]
 edition = "2018"
 license = "MIT"

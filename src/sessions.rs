@@ -3,48 +3,35 @@
 //! A session can be either for a service-account or impersonated via a firebase auth user id.
 
 use super::credentials;
-use super::errors;
-
+use super::errors::{extract_google_api_error, FirebaseError};
+use super::jwt::{
+    create_jwt, jwt_update_expiry_if, verify_access_token, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
+    JWT_AUDIENCE_IDENTITY,
+};
 use super::FirebaseAuthBearer;
+use std::slice::Iter;
 
 pub mod user {
-    use super::errors::{FirebaseError, Result};
+    use super::*;
+    use credentials::Credentials;
 
-    use biscuit::jwa::SignatureAlgorithm;
-    use biscuit::{
-        jws::{RegisteredHeader, Secret},
-        ClaimsSet, RegisteredClaims, SingleOrMultiple, JWT,
-    };
-
-    use super::credentials::Credentials;
-
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
     use reqwest::Client;
     use serde::{Deserialize, Serialize};
-    use std::str::FromStr;
+    use std::ops::Deref;
 
-    use std::ops::Add;
-
-    static JWT_AUD: &str =
-        "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit";
-
-    macro_rules! token_endpoint {
-        () => {
-            "https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key={}"
-        };
-    }
-    macro_rules! refresh_to_access_endpoint {
-        () => {
-            "https://securetoken.googleapis.com/v1/token?key={}"
-        };
+    #[inline]
+    fn token_endpoint(v: &str) -> String {
+        format!(
+            "https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key={}",
+            v
+        )
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct JWTGoogleClaims {
-        scope: String,
+    #[inline]
+    fn refresh_to_access_endpoint(v: &str) -> String {
+        format!("https://securetoken.googleapis.com/v1/token?key={}", v)
     }
-
-    pub type FirebaseIDTokenJWT = JWT<JWTGoogleClaims, biscuit::Empty>;
 
     /// An impersonated session.
     /// If you access FireStore with such a session, FireStore rules might restrict access to data.
@@ -72,6 +59,16 @@ pub mod user {
         token: String,
         returnSecureToken: bool,
     }
+
+    impl CustomJwtToFirebaseID {
+        fn new(token: String) -> Self {
+            CustomJwtToFirebaseID {
+                token,
+                returnSecureToken: true,
+            }
+        }
+    }
+
     #[allow(non_snake_case)]
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     struct CustomJwtToFirebaseIDResponse {
@@ -91,89 +88,7 @@ pub mod user {
         project_id: String,
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct FirebaseUIDClaims {
-        uid: String,
-    }
-
     impl Session {
-        /// Create a new firestore user session via a valid refresh_token
-        pub fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session> {
-            let request_body = vec![
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token),
-            ];
-
-            let url = format!(refresh_to_access_endpoint!(), credentials.api_key);
-            let client = Client::new();
-            let ref mut response = client.post(&url).form(&request_body).send()?;
-            let r: RefreshTokenToAccessTokenResponse = response.json()?;
-            return Ok(Session {
-                userid: r.user_id,
-                bearer: r.id_token,
-                refresh_token: Some(r.refresh_token),
-                projectid: credentials.project_id.to_owned(),
-                api_key: credentials.api_key.clone(),
-            });
-        }
-
-        /// Create a new firestore user session with a fresh access token and new refresh token
-        pub fn by_user_id(credentials: &Credentials, user_id: &str) -> Result<Session> {
-            // Create custom jwt
-            let header = From::from(RegisteredHeader {
-                algorithm: SignatureAlgorithm::RS256,
-                key_id: Some(credentials.private_key_id.to_owned()),
-                ..Default::default()
-            });
-            let expected_claims = ClaimsSet::<FirebaseUIDClaims> {
-                registered: RegisteredClaims {
-                    issuer: Some(FromStr::from_str(&credentials.client_email)?),
-                    subject: Some(FromStr::from_str(&credentials.client_email)?),
-                    audience: Some(SingleOrMultiple::Single(FromStr::from_str(JWT_AUD)?)),
-                    expiry: Some(biscuit::Timestamp::from(Utc::now().add(Duration::hours(1)))),
-                    issued_at: Some(biscuit::Timestamp::from(Utc::now())),
-                    ..Default::default()
-                },
-                private: FirebaseUIDClaims {
-                    uid: user_id.to_owned(),
-                },
-            };
-            let jwt = JWT::new_decoded(header, expected_claims);
-
-            let signing_secret =
-                Secret::RsaKeyPair(std::sync::Arc::new(credentials.create_rsa_key_pair()?));
-            let jwt = jwt
-                .into_encoded(&signing_secret)?
-                .unwrap_encoded()
-                .to_string();
-
-            let url = format!(token_endpoint!(), credentials.api_key);
-            let json = CustomJwtToFirebaseID {
-                returnSecureToken: true,
-                token: jwt,
-            };
-
-            let client = Client::new();
-            let mut r = client.post(&url).json(&json).send()?;
-            if r.status() != 200 {
-                return Err(FirebaseError::UnexpectedResponse(
-                    "Server responded with an error",
-                    r.status(),
-                    r.text()?,
-                    serde_json::to_string_pretty(&json)?,
-                ));
-            }
-            let r: CustomJwtToFirebaseIDResponse = r.json()?;
-
-            Ok(Session {
-                userid: user_id.to_owned(),
-                bearer: r.idToken,
-                refresh_token: Some(r.refreshToken),
-                projectid: credentials.project_id.to_owned(),
-                api_key: credentials.api_key.clone(),
-            })
-        }
-
         /// Create an impersonated session
         ///
         /// If the optionally provided access token is still valid, it will be used.
@@ -192,7 +107,7 @@ pub mod user {
             user_id: Option<&str>,
             firebase_tokenid: Option<&str>,
             refresh_token: Option<&str>,
-        ) -> Result<Session> {
+        ) -> Result<Session, FirebaseError> {
             // Check if current tokenid is still valid
             if let Some(firebase_tokenid) = firebase_tokenid {
                 let r = Session::by_access_token(credentials, firebase_tokenid);
@@ -220,89 +135,102 @@ pub mod user {
             Err(FirebaseError::Generic("No parameter given"))
         }
 
+        /// Create a new firestore user session via a valid refresh_token
+        pub fn by_refresh_token(
+            credentials: &Credentials,
+            refresh_token: &str,
+        ) -> Result<Session, FirebaseError> {
+            let request_body = vec![
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+            ];
+
+            let url = refresh_to_access_endpoint(&credentials.api_key);
+            let client = Client::new();
+            let ref mut response = client.post(&url).form(&request_body).send()?;
+            let r: RefreshTokenToAccessTokenResponse = response.json()?;
+            Ok(Session {
+                userid: r.user_id,
+                bearer: r.id_token,
+                refresh_token: Some(r.refresh_token),
+                projectid: credentials.project_id.to_owned(),
+                api_key: credentials.api_key.clone(),
+            })
+        }
+
+        /// Create a new firestore user session with a fresh access token and new refresh token
+        ///
+        /// If possible, use existing tokens and [`new`] instead.
+        pub fn by_user_id(
+            credentials: &Credentials,
+            user_id: &str,
+        ) -> Result<Session, FirebaseError> {
+            let scope: Option<Iter<String>> = None;
+            let jwt = create_jwt(
+                &credentials,
+                scope,
+                Duration::hours(1),
+                None,
+                Some(user_id.to_owned()),
+                JWT_AUDIENCE_IDENTITY,
+            )?;
+            let secret = credentials
+                .keys
+                .secret
+                .as_ref()
+                .ok_or(FirebaseError::Generic(
+                    "No private key added via add_keypair_key!",
+                ))?;
+            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
+
+            let mut r = Client::new()
+                .post(&token_endpoint(&credentials.api_key))
+                .json(&CustomJwtToFirebaseID::new(encoded))
+                .send()?;
+            extract_google_api_error(&mut r, || user_id.to_owned())?;
+            let r: CustomJwtToFirebaseIDResponse = r.json()?;
+
+            Ok(Session {
+                userid: user_id.to_owned(),
+                bearer: r.idToken,
+                refresh_token: Some(r.refreshToken),
+                projectid: credentials.project_id.to_owned(),
+                api_key: credentials.api_key.clone(),
+            })
+        }
+
         pub fn by_access_token(
             credentials: &Credentials,
             firebase_tokenid: &str,
-        ) -> Result<Session> {
-            let token = JWT::<biscuit::Empty, biscuit::Empty>::new_encoded(&firebase_tokenid);
-
-            let header = token.unverified_header()?;
-            let kid = header
-                .registered
-                .key_id
-                .as_ref()
-                .ok_or(FirebaseError::Generic("No key ID"))?;
-
-            let key_params = credentials
-                .public_key(kid)
-                .ok_or(FirebaseError::Generic("Did not find jwk"))?;
-            let secret = key_params.jws_public_key_secret();
-
-            let token = token.decode(&secret, SignatureAlgorithm::RS256)?;
-
-            // Check expire time and issued-at time
-            let ref claims = token.payload()?.registered;
-            if let Some(issued_at) = claims.issued_at.as_ref() {
-                if Utc::now().timestamp_millis() < issued_at.timestamp_millis() {
-                    return Err(FirebaseError::Generic("Token has invalid issued_at"));
-                }
-            }
-            if let Some(expiry) = claims.expiry.as_ref() {
-                if Utc::now().timestamp_millis() > expiry.timestamp_millis() {
-                    return Err(FirebaseError::Generic("Token expired"));
-                }
-            }
-
-            let userid = claims.subject.as_ref().map(|ref f| f.to_string()).ok_or(
-                FirebaseError::Generic("Subject not set. Can not extract userid"),
-            )?;
-            let projectid = claims.audience.as_ref().ok_or(FirebaseError::Generic(
-                "Audience not set. Can not extract projectid",
-            ))?;
-
-            if let SingleOrMultiple::Single(projectid) = projectid {
-                return Ok(Session {
-                    userid,
-                    projectid: projectid.to_string(),
-                    bearer: firebase_tokenid.to_owned(),
-                    refresh_token: None,
-                    api_key: credentials.api_key.clone(),
-                });
-            }
-            return Err(FirebaseError::Generic(
-                "jwk: Haven't found all required fields",
-            ));
+        ) -> Result<Session, FirebaseError> {
+            let result = verify_access_token(&credentials, firebase_tokenid)?
+                .ok_or(FirebaseError::Generic("Validation failed"))?;
+            return Ok(Session {
+                userid: result.subject,
+                projectid: result.audience,
+                bearer: firebase_tokenid.to_owned(),
+                refresh_token: None,
+                api_key: credentials.api_key.clone(),
+            });
         }
     }
 }
 
 /// Find the service account session defined in here
 pub mod service_account {
-    use biscuit::jwa::SignatureAlgorithm;
-    use biscuit::{
-        jws::{RegisteredHeader, Secret},
-        ClaimsSet, RegisteredClaims, SingleOrMultiple, StringOrUri, JWT,
-    };
+    use super::*;
+    use credentials::Credentials;
 
+    use chrono::Duration;
     use serde::{Deserialize, Serialize};
-    use std::str::FromStr;
-    pub type GoogleJWT = JWT<biscuit::Empty, biscuit::Empty>;
-
-    static JWT_SUBJECT: &str = "https://firestore.googleapis.com/google.firestore.v1.Firestore";
-
-    use chrono::{Duration, Utc};
-
     use std::cell::RefCell;
-    use std::ops::Add;
-
-    use super::credentials::Credentials;
-    use super::errors::Result;
+    use std::ops::Deref;
 
     /// Service account session
     #[derive(Serialize, Deserialize)]
     pub struct Session {
         pub credentials: Credentials,
-        jwt: RefCell<GoogleJWT>,
+        jwt: RefCell<AuthClaimsJWT>,
         bearer_cache: RefCell<String>,
     }
 
@@ -311,34 +239,21 @@ pub mod service_account {
             &self.credentials.project_id
         }
         /// Return the encoded jwt to be used as bearer token. If the jwt
-        /// issue_at is older than 50 mins, it will be updated to the current time.
+        /// issue_at is older than 50 minutes, it will be updated to the current time.
         fn bearer(&'a self) -> String {
             let mut jwt = self.jwt.borrow_mut();
-            let ref mut claims = jwt.payload_mut().unwrap().registered;
 
-            let now = biscuit::Timestamp::from(Utc::now());
-            if let Some(issued_at) = claims.issued_at.as_ref() {
-                let diff: Duration = Utc::now().time() - issued_at.time();
-                if diff.num_minutes() > 50 {
-                    claims.issued_at = Some(now);
-                } else {
-                    return self.bearer_cache.borrow().clone();
+            if jwt_update_expiry_if(&mut jwt, 50) {
+                if let Some(secret) = self.credentials.keys.secret.as_ref() {
+                    if let Ok(v) = self.jwt.borrow().encode(&secret.deref()) {
+                        if let Ok(v2) = v.encoded() {
+                            self.bearer_cache.swap(&RefCell::new(v2.encode()));
+                        }
+                    }
                 }
-            } else {
-                claims.issued_at = Some(now);
             }
-            let signing_secret = Secret::RsaKeyPair(std::sync::Arc::new(
-                self.credentials.create_rsa_key_pair().unwrap(),
-            ));
-            self.bearer_cache.swap(&RefCell::new(
-                self.jwt
-                    .borrow()
-                    .encode(&signing_secret)
-                    .unwrap()
-                    .unwrap_encoded()
-                    .encode(),
-            ));
-            return self.bearer_cache.borrow().clone();
+
+            self.bearer_cache.borrow().clone()
         }
     }
 
@@ -352,34 +267,29 @@ pub mod service_account {
         /// as bearer token.
         ///
         /// See https://developers.google.com/identity/protocols/OAuth2ServiceAccount
-        pub fn new(credentials: Credentials) -> Result<Session> {
-            let header = From::from(RegisteredHeader {
-                algorithm: SignatureAlgorithm::RS256,
-                key_id: Some(credentials.private_key_id.to_owned()),
-                ..Default::default()
-            });
-            let expected_claims = ClaimsSet::<biscuit::Empty> {
-                // JWTGoogleClaims
-                registered: RegisteredClaims {
-                    issuer: Some(FromStr::from_str(&credentials.client_email[..])?),
-                    audience: Some(SingleOrMultiple::Single(StringOrUri::from_str(
-                        JWT_SUBJECT,
-                    )?)),
-                    subject: Some(StringOrUri::from_str(&credentials.client_email[..])?),
-                    expiry: Some(biscuit::Timestamp::from(Utc::now().add(Duration::hours(1)))),
-                    issued_at: Some(biscuit::Timestamp::from(Utc::now())),
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
-            let jwt = JWT::new_decoded(header, expected_claims);
+        pub fn new(credentials: Credentials) -> Result<Session, FirebaseError> {
+            let scope: Option<Iter<String>> = None;
+            let jwt = create_jwt(
+                &credentials,
+                scope,
+                Duration::hours(1),
+                None,
+                None,
+                JWT_AUDIENCE_FIRESTORE,
+            )?;
+            let secret = credentials
+                .keys
+                .secret
+                .as_ref()
+                .ok_or(FirebaseError::Generic(
+                    "No private key added via add_keypair_key!",
+                ))?;
+            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
-            let signing_secret =
-                Secret::RsaKeyPair(std::sync::Arc::new(credentials.create_rsa_key_pair()?));
             Ok(Session {
-                bearer_cache: RefCell::new(jwt.encode(&signing_secret)?.unwrap_encoded().encode()),
+                bearer_cache: RefCell::new(encoded),
                 jwt: RefCell::new(jwt),
-                credentials: credentials,
+                credentials,
             })
         }
     }
