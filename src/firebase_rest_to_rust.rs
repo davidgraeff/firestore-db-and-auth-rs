@@ -47,8 +47,10 @@ fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value {
         return Value::Bool(boolean_value);
     } else if let Some(array_value) = v.array_value.as_ref() {
         let mut vec: Vec<Value> = Vec::new();
-        for k in &array_value.values {
-            vec.push(firebase_value_to_serde_value(&k));
+        if let Some(values) = &array_value.values {
+            for k in values {
+                vec.push(firebase_value_to_serde_value(&k));
+            }
         }
         return Value::Array(vec);
     }
@@ -97,7 +99,7 @@ fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value {
             vec.push(serde_value_to_firebase_value(&k));
         }
         return dto::Value {
-            array_value: Some(dto::ArrayValue { values: vec }),
+            array_value: Some(dto::ArrayValue { values: Some(vec) }),
             ..Default::default()
         };
     }
