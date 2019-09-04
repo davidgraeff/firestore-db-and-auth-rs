@@ -149,7 +149,7 @@ pub struct UnaryFilter {
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct ArrayValue {
-    pub values: Vec<Value>,
+    pub values: Option<Vec<Value>>,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
