@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use firestore_db_and_auth::*;
 use firestore_db_and_auth::errors::FirebaseError;
+use firestore_db_and_auth::*;
 
-const TEST_USER_ID: &str= "Io2cPph06rUWM3ABcIHguR3CIw6v1";
+const TEST_USER_ID: &str = "Io2cPph06rUWM3ABcIHguR3CIw6v1";
 
 #[test]
 fn service_account_session() -> errors::Result<()> {
@@ -76,8 +76,7 @@ fn user_account_session() -> errors::Result<()> {
     assert_eq!(user_session.projectid, cred.project_id);
 
     println!("user::Session::by_access_token");
-    let mut user_session =
-        sessions::user::Session::by_access_token(&cred, &user_session.bearer)?;
+    let mut user_session = sessions::user::Session::by_access_token(&cred, &user_session.bearer)?;
 
     assert_eq!(user_session.userid, TEST_USER_ID);
 
@@ -119,14 +118,15 @@ fn user_account_session() -> errors::Result<()> {
         &mut user_session,
         "tests",
         "abc",
-        private::FieldOperator::EQUAL,
+        dto::FieldOperator::EQUAL,
         "a_string",
     )?;
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].a_string, "abc");
 
     let mut count = 0;
-    let list_it: documents::List<DemoDTO, _> = documents::list(&mut user_session, "tests".to_owned());
+    let list_it: documents::List<DemoDTO, _> =
+        documents::list(&mut user_session, "tests".to_owned());
     for _doc in list_it {
         count += 1;
     }
@@ -141,10 +141,8 @@ fn user_account_session() -> errors::Result<()> {
             assert_eq!(code, 404);
             assert!(message.contains("No document to update"));
             assert_eq!(context, "tests/non_existing");
-        },
-        _ => {
-            panic!("Expected an APIError")
-        },
+        }
+        _ => panic!("Expected an APIError"),
     };
 
     documents::delete(&mut user_session, "tests/test", false)?;
@@ -155,7 +153,7 @@ fn user_account_session() -> errors::Result<()> {
         &mut user_session,
         "tests",
         "abc",
-        private::FieldOperator::EQUAL,
+        dto::FieldOperator::EQUAL,
         "a_string",
     )?;
     assert_eq!(results.len(), 0);

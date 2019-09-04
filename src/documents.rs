@@ -193,6 +193,30 @@ pub struct List<'a, T, BEARER> {
 /// Please note that this API acts as an iterator of same-like documents.
 /// This type is not suitable if you want to list documents of different types.
 ///
+/// Example:
+/// ```rust
+/// # use serde::{Serialize, Deserialize};
+/// #[derive(Debug, Serialize, Deserialize)]
+/// struct DemoDTO { a_string: String, an_int: u32, }
+///
+/// use firestore_db_and_auth::{documents};
+/// # use firestore_db_and_auth::{credentials::Credentials, sessions, errors::Result};
+///
+/// # let credentials : Credentials = Credentials::new(include_str!("../firebase-service-account.json"),
+///                                         &[include_str!("../tests/service-account-for-tests.jwks")])?;
+/// # let session = sessions::service_account::Session::new(credentials)?;
+///
+/// let values: documents::List<DemoDTO, _> = documents::list(&session, "tests".to_owned());
+/// for doc_result in values {
+///     // The data is wrapped in a Result<> because fetching new data could have failed
+///     // A tuple is returned on success with the document itself and and metadata
+///     // with .name, .create_time, .update_time fields.
+///     let (doc, _metadata) = doc_result?;
+///     println!("{:?}", doc);
+/// }
+/// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+/// ```
+///
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'collection_id' The document path / collection; For example "my_collection" or "a/nested/collection"
@@ -233,7 +257,7 @@ where
     for<'b> T: Deserialize<'b>,
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
-    type Item = Result<T>;
+    type Item = Result<(T, dto::Document)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
@@ -270,7 +294,19 @@ where
             self.done = true;
         }
 
-        Some(document_to_pod(&doc))
+        let result = document_to_pod(&doc);
+        match result {
+            Err(e) => Some(Err(e)),
+            Ok(pod) => Some(Ok((
+                pod,
+                dto::Document {
+                    update_time: doc.update_time.clone(),
+                    create_time: doc.create_time.clone(),
+                    name: doc.name.clone(),
+                    fields: None,
+                },
+            ))),
+        }
     }
 }
 
@@ -360,11 +396,7 @@ where
 /// * 'auth' The authentication token
 /// * 'path' The relative collection path and document id, for example "my_collection/document_id"
 /// * 'fail_if_not_existing' If true this method will return an error if the document does not exist.
-pub fn delete<'a, BEARER>(
-    auth: &'a BEARER,
-    path: &str,
-    fail_if_not_existing: bool,
-) -> Result<()>
+pub fn delete<'a, BEARER>(auth: &'a BEARER, path: &str, fail_if_not_existing: bool) -> Result<()>
 where
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {

@@ -8,17 +8,12 @@ extern crate untrusted;
 
 pub mod credentials;
 pub mod documents;
-pub(crate) mod dto;
+pub mod dto;
 pub mod errors;
 pub mod firebase_rest_to_rust;
 pub mod jwt;
 pub mod sessions;
 pub mod users;
-
-#[doc(hidden)]
-pub mod private {
-    pub use crate::dto::*;
-}
 
 #[cfg(feature = "rocket_support")]
 pub mod rocket;

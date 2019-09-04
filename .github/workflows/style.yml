@@ -9,8 +9,8 @@ on:
 jobs:
   build:
 
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
       - name: Check for leftover println
-        run: ./test/left_over_println.sh
+        run: ./tests/left_over_println.sh

@@ -36,7 +36,7 @@ Limitations:
 This crate operates on DTOs (Data transfer objects) for type-safe operations on your Firestore DB.
 
 ```rust
-use firestore_db_and_auth::{credentials, sessions};
+use firestore_db_and_auth::{credentials::Credentials, sessions, documents, errors::Result};
 
 /// A document structure for demonstration purposes
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,15 +50,20 @@ let obj = DemoDTO {
     an_int: 14,
 };
 
-/// Write the given object with the document id "service_test" to the "tests" collection.
-/// You do not need to provide a document id (use "None" instead) and let Firestore generate one for you.
-/// 
-/// In either way a document is created or updated (overwritten).
-/// 
-/// The method will return document metadata (including a possible generated document id)
-let result = documents::write(&session, "tests", Some("service_test"), &obj)?;
+fn main() -> Result<()> {
+    let cred = Credentials::from_file("firebase-service-account.json")?;
+    let session = sessions::service_account::Session::new(&cred)?;
+        
+    /// Write the given object with the document id "service_test" to the "tests" collection.
+    /// You do not need to provide a document id (use "None" instead) and let Firestore generate one for you.
+    /// 
+    /// In either way a document is created or updated (overwritten).
+    /// 
+    /// The method will return document metadata (including a possible generated document id)
+    let result = documents::write(&session, "tests", Some("service_test"), &obj)?;
 
-println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time, result.updated_time);
+    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time, result.updated_time);
+}
 ```
 
 Read the document with the id "service_test" from the Firestore "tests" collection:
@@ -74,7 +79,7 @@ It will hide the complexity of the paging API and fetches new documents when nec
 let values: documents::List<DemoDTO, _> = documents::list(&session, "tests");
 for doc_result in values {
     // The document is wrapped in a Result<> because fetching new data could have failed
-    let doc = doc_result?;
+    let (doc, _metadata) = doc_result?;
     println!("{:?}", doc);
 }
 ```
@@ -86,6 +91,8 @@ For quering the database you would use the `query` method.
 In the following example the collection "tests" is queried for document(s) with the "id" field equal to "Sam Weiss".
 
 ```rust
+use firestore_db_and_auth::dto;
+
 let objs : Vec<DemoDTO> = documents::query(&session, "tests", "Sam Weiss", dto::FieldOperator::EQUAL, "id")?;
 ```
 
@@ -128,14 +135,9 @@ let cred = credentials::Credentials::from_file("firebase-service-account.json")
 
 /// To use any of the Firestore methods, you need a session first. You either want
 /// an impersonated session bound to a Firebase Auth user or a service account session.
-let mut session = sessions::service_account::Session::new(&cred)
+let session = sessions::service_account::Session::new(&cred)
     .expect("Create a service account session");
 ```
-
-**Mutable session variable?**: Access (bearer) tokens have a limited lifetime, usually about an hour.
-They need to be refreshed via a refresh token, which is also part of the session object.
-When you perform a call to an API, the session will automatically refresh your access token if necessary,
-and therefore requires the session object to be mutable.
 
 ### Document access via a firebase user access / refresh token or via user_id
 
@@ -151,7 +153,7 @@ let cred = credentials::Credentials::from_file("firebase-service-account.json")
 
 /// To use any of the Firestore methods, you need a session first.
 /// Create an impersonated session bound to a Firebase Auth user via your service account credentials.
-let mut session = sessions::user::Session::by_user_id(&cred, "the_user_id")
+let session = sessions::user::Session::by_user_id(&cred, "the_user_id")
     .expect("Create a user session");
 ```
 
@@ -159,14 +161,14 @@ If you have a valid refresh token already and want to generate an access token (
 
 ```rust
 let refresh_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
-let mut session = sessions::user::Session::by_refresh_token(&cred, &refresh_token)?;
+let session = sessions::user::Session::by_refresh_token(&cred, &refresh_token)?;
 ```
 
 The last way to retrieve a session object is by providing a valid access token like so:
 
 ```rust
 let access_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
-let mut session = sessions::user::Session::by_access_token(&cred, &access_token)?;
+let session = sessions::user::Session::by_access_token(&cred, &access_token)?;
 ```
 
 The `by_access_token` method will fail if the token is not valid anymore.
