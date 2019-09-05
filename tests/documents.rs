@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use firestore_db_and_auth::errors::FirebaseError;
 use firestore_db_and_auth::*;
 
-const TEST_USER_ID: &str = "Io2cPph06rUWM3ABcIHguR3CIw6v1";
+const TEST_USER_ID: &str = include_str!("test_user_id.txt");
 
 #[test]
 fn service_account_session() -> errors::Result<()> {

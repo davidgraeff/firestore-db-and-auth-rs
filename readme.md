@@ -118,7 +118,7 @@ if let Err(e) = r.err() {
 
 The code is numeric, the message is what the Google server returned as message.
 The context string depends on the called method.
-It may me the collection or document id or any other context information.
+It may be the collection or document id or any other context information.
 
 ### Document access via service account
 
@@ -157,14 +157,14 @@ let session = sessions::user::Session::by_user_id(&cred, "the_user_id")
     .expect("Create a user session");
 ```
 
-If you have a valid refresh token already and want to generate an access token (and a session object), you do this instead:
+If you already have a valid refresh token and want to generate an access token (and a session object), you do this instead:
 
 ```rust
 let refresh_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
 let session = sessions::user::Session::by_refresh_token(&cred, &refresh_token)?;
 ```
 
-The last way to retrieve a session object is by providing a valid access token like so:
+Another way of retrieving a session object is by providing a valid access token like so:
 
 ```rust
 let access_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
@@ -173,12 +173,11 @@ let session = sessions::user::Session::by_access_token(&cred, &access_token)?;
 
 The `by_access_token` method will fail if the token is not valid anymore.
 Please note that a session created this way is not able to automatically refresh its access token.
-There is no *refresh_token* associated with it.
+(There is no *refresh_token* associated with it.)
 
 
-## Usage in cloud functions
+## Cloud functions: Improve cold-start time
 
-The start up time is crucial for cloud functions.
 The usual start up procedure includes three IO operations:
 
 * downloading two public jwks keys from a Google server,

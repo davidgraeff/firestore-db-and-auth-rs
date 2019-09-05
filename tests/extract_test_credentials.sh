@@ -2,9 +2,9 @@
 # Github Actions has a secret variable for this repository called "SERVICE_ACCOUNT_JSON"
 # that contains the base64 encoded credentials json
 if [ "$(uname)" == "Darwin" ]; then
-    echo $SERVICE_ACCOUNT_JSON | base64 -D > firebase-service-account.json
+    echo "$SERVICE_ACCOUNT_JSON" | base64 -D > firebase-service-account.json
 else
-    echo $SERVICE_ACCOUNT_JSON | base64 -d > firebase-service-account.json
+    echo "$SERVICE_ACCOUNT_JSON" | base64 -d > firebase-service-account.json
 fi
 # Print the first few characters
 head -n 3 firebase-service-account.json
