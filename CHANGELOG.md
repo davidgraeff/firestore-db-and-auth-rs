@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4] - 2019-09-05
+
+### Changed
+- User sessions Session::by_user_id now requires a 2nd parameter: "with_refresh_token"
+- Accept String and &str in some places
+
 ## [0.3.1] - 2019-09-05
 
 ### Changed

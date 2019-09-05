@@ -61,10 +61,10 @@ pub mod user {
     }
 
     impl CustomJwtToFirebaseID {
-        fn new(token: String) -> Self {
+        fn new(token: String, with_refresh_token: bool) -> Self {
             CustomJwtToFirebaseID {
                 token,
-                returnSecureToken: true,
+                returnSecureToken: with_refresh_token,
             }
         }
     }
@@ -74,8 +74,8 @@ pub mod user {
     struct CustomJwtToFirebaseIDResponse {
         kind: Option<String>,
         idToken: String,
-        refreshToken: String,
-        expiresIn: String,
+        refreshToken: Option<String>,
+        expiresIn: Option<String>,
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -126,7 +126,7 @@ pub mod user {
 
             // Check if refresh_token is already sufficient
             if let Some(user_id) = user_id {
-                let r = Session::by_user_id(credentials, user_id);
+                let r = Session::by_user_id(credentials, user_id, true);
                 if r.is_ok() {
                     return r;
                 }
@@ -136,6 +136,11 @@ pub mod user {
         }
 
         /// Create a new firestore user session via a valid refresh_token
+        ///
+        /// Arguments:
+        /// - `credentials` The credentials
+        /// - `refresh_token` A refresh token.
+        ///
         pub fn by_refresh_token(
             credentials: &Credentials,
             refresh_token: &str,
@@ -158,12 +163,19 @@ pub mod user {
             })
         }
 
-        /// Create a new firestore user session with a fresh access token and new refresh token
+        /// Create a new firestore user session with a fresh access token.
         ///
-        /// If possible, use existing tokens and [`new`] instead.
+        /// Arguments:
+        /// - `credentials` The credentials
+        /// - `user_id` The firebase Authentication user id. Usually a string of about 30 characters like "Io2cPph06rUWM3ABcIHguR3CIw6v1".
+        /// - `with_refresh_token` A refresh token is returned as well. This should be persisted somewhere for later reuse.
+        ///    Google generates only a few dozens of refresh tokens before it starts to invalidate already generated ones.
+        ///    For short lived, immutable, non-persisting services you do not want a refresh token.
+        ///
         pub fn by_user_id(
             credentials: &Credentials,
             user_id: &str,
+            with_refresh_token: bool
         ) -> Result<Session, FirebaseError> {
             let scope: Option<Iter<String>> = None;
             let jwt = create_jwt(
@@ -185,7 +197,7 @@ pub mod user {
 
             let mut r = Client::new()
                 .post(&token_endpoint(&credentials.api_key))
-                .json(&CustomJwtToFirebaseID::new(encoded))
+                .json(&CustomJwtToFirebaseID::new(encoded, with_refresh_token))
                 .send()?;
             extract_google_api_error(&mut r, || user_id.to_owned())?;
             let r: CustomJwtToFirebaseIDResponse = r.json()?;
@@ -193,7 +205,7 @@ pub mod user {
             Ok(Session {
                 userid: user_id.to_owned(),
                 bearer: r.idToken,
-                refresh_token: Some(r.refreshToken),
+                refresh_token: r.refreshToken,
                 projectid: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
             })

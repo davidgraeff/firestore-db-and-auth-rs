@@ -36,7 +36,7 @@ Limitations:
 This crate operates on DTOs (Data transfer objects) for type-safe operations on your Firestore DB.
 
 ```rust
-use firestore_db_and_auth::{credentials::Credentials, sessions, documents, errors::Result};
+use firestore_db_and_auth::{Credentials, ServiceSession, documents, errors::Result};
 
 /// A document structure for demonstration purposes
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,7 +52,7 @@ let obj = DemoDTO {
 
 fn main() -> Result<()> {
     let cred = Credentials::from_file("firebase-service-account.json")?;
-    let session = sessions::service_account::Session::new(&cred)?;
+    let session = ServiceSession::new(&cred)?;
         
     /// Write the given object with the document id "service_test" to the "tests" collection.
     /// You do not need to provide a document id (use "None" instead) and let Firestore generate one for you.
@@ -76,6 +76,8 @@ For listing all documents of the "tests" collection you want to use the `List` s
 It will hide the complexity of the paging API and fetches new documents when necessary:
 
 ```rust
+use firestore_db_and_auth::{documents};
+
 let values: documents::List<DemoDTO, _> = documents::list(&session, "tests");
 for doc_result in values {
     // The document is wrapped in a Result<> because fetching new data could have failed
@@ -91,7 +93,7 @@ For quering the database you would use the `query` method.
 In the following example the collection "tests" is queried for document(s) with the "id" field equal to "Sam Weiss".
 
 ```rust
-use firestore_db_and_auth::dto;
+use firestore_db_and_auth::{documents, dto};
 
 let objs : Vec<DemoDTO> = documents::query(&session, "tests", "Sam Weiss", dto::FieldOperator::EQUAL, "id")?;
 ```
@@ -106,6 +108,8 @@ and Google REST API errors. If you want to specifically check for an API error,
 you could do so:
 
 ```rust
+use firestore_db_and_auth::{documents, errors::FirebaseError};
+
 let r = documents::delete(&session, "tests/non_existing", true);
 if let Err(e) = r.err() {
     if let FirebaseError::APIError(code, message, context) = e {
@@ -127,15 +131,15 @@ It may be the collection or document id or any other context information.
 2. Add another field `"api_key" : "YOUR_API_KEY"` and replace YOUR_API_KEY with your *Web API key*, to be found in the [Google Firebase console](https://console.firebase.google.com) in "Project Overview -> Settings - > General".
 
 ```rust
-use firestore_db_and_auth::{credentials, sessions};
+use firestore_db_and_auth::{Credentials, ServiceSession};
 
 /// Create credentials object. You may as well do that programmatically.
-let cred = credentials::Credentials::from_file("firebase-service-account.json")
+let cred = Credentials::from_file("firebase-service-account.json")
     .expect("Read credentials file");
 
 /// To use any of the Firestore methods, you need a session first. You either want
 /// an impersonated session bound to a Firebase Auth user or a service account session.
-let session = sessions::service_account::Session::new(&cred)
+let session = ServiceSession::new(&cred)
     .expect("Create a service account session");
 ```
 
@@ -145,15 +149,15 @@ You can create a user session in various ways.
 If you just have the firebase Auth user_id, you would follow these steps:
 
 ```rust
-use firestore_db_and_auth::{credentials, sessions};
+use firestore_db_and_auth::{Credentials, sessions};
 
 /// Create credentials object. You may as well do that programmatically.
-let cred = credentials::Credentials::from_file("firebase-service-account.json")
+let cred = Credentials::from_file("firebase-service-account.json")
     .expect("Read credentials file");
 
 /// To use any of the Firestore methods, you need a session first.
 /// Create an impersonated session bound to a Firebase Auth user via your service account credentials.
-let session = sessions::user::Session::by_user_id(&cred, "the_user_id")
+let session = UserSession::by_user_id(&cred, "the_user_id")
     .expect("Create a user session");
 ```
 
@@ -161,14 +165,14 @@ If you already have a valid refresh token and want to generate an access token (
 
 ```rust
 let refresh_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
-let session = sessions::user::Session::by_refresh_token(&cred, &refresh_token)?;
+let session = UserSession::by_refresh_token(&cred, &refresh_token)?;
 ```
 
 Another way of retrieving a session object is by providing a valid access token like so:
 
 ```rust
 let access_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
-let session = sessions::user::Session::by_access_token(&cred, &access_token)?;
+let session = UserSession::by_access_token(&cred, &access_token)?;
 ```
 
 The `by_access_token` method will fail if the token is not valid anymore.
@@ -193,7 +197,7 @@ First download the 2 public key files:
 Create a `Credentials` object like so:
 
 ```rust
-use firestore_db_and_auth::credentials::Credentials;
+use firestore_db_and_auth::Credentials;
 let c = Credentials::new(include_str!("firebase-service-account.json"),
                          &[include_str!("securetoken.jwks"), include_str!("service-account.jwks")])?;
 ```

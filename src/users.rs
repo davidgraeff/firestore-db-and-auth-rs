@@ -10,10 +10,6 @@ use serde::{Deserialize, Serialize};
 use crate::FirebaseAuthBearer;
 use reqwest::Client;
 
-pub trait DocumentPath<'a> {
-    fn path(&self) -> &'a str;
-}
-
 /// A federated services like Facebook, Github etc that the user has used to
 /// authenticated himself and that he associated with this firebase auth account.
 #[allow(non_snake_case)]

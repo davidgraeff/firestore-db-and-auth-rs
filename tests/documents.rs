@@ -61,7 +61,7 @@ fn user_account_session() -> errors::Result<()> {
     // Generate a new refresh token if necessary
     println!("Generate new user auth token");
     let user_session: sessions::user::Session = if refresh_token.is_empty() {
-        let session = sessions::user::Session::by_user_id(&cred, TEST_USER_ID)?;
+        let session = sessions::user::Session::by_user_id(&cred, TEST_USER_ID, true)?;
         std::fs::write(
             "refresh-token-for-tests.txt",
             &session.refresh_token.as_ref().unwrap(),
@@ -105,13 +105,6 @@ fn user_account_session() -> errors::Result<()> {
 
     assert_eq!(read.a_string, "abc");
     assert_eq!(read.an_int, 12);
-
-    println!("users::user_info");
-    let user_info_container = users::user_info(&user_session)?;
-    assert_eq!(
-        user_info_container.users[0].localId.as_ref().unwrap(),
-        TEST_USER_ID
-    );
 
     // Query for all documents with field "a_string" and value "abc"
     let results: Vec<DemoDTO> = documents::query(
