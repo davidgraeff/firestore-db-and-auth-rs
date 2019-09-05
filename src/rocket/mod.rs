@@ -10,7 +10,7 @@
 //! Example:
 //!
 //! ```
-//! use firestore_db_and_auth::{Credentials, sessions::service_account, rocket::FirestoreAuthSessionGuard};
+//! use firestore_db_and_auth::{Credentials, rocket::FirestoreAuthSessionGuard};
 //!
 //! fn main() {
 //!     let credentials = Credentials::from_file("firebase-service-account.json").unwrap();
@@ -19,9 +19,9 @@
 //!
 //! /// And an example route could be:
 //! #[get("/hello")]
-//! fn hello<'r>(_api_key: FirestoreAuthSessionGuard,) -> &'r str {
+//! fn hello<'r>(auth: FirestoreAuthSessionGuard) -> String {
 //!     // ApiKey is a single value tuple with a sessions::user::Session object inside
-//!     "you are logged in"
+//!    format!("you are logged in. user_id: {}", auth.0.userid)
 //! }
 //!
 //! #[get("/hello")]

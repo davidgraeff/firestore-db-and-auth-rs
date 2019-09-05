@@ -24,12 +24,14 @@ Limitations:
 
 ### Cargo features
 
-* `rocket_support`: Enables the rocket guard.
-  Only Firestore Auth authorized requests can pass this guard.
-  This feature requires rust nightly, because Rocket itself requires nightly.
 * `rustls-tls`: Use rustls instead of native-tls (openssl on Linux).
   If you want to compile this crate for musl, this is what you want.
   Don't forget to disable the default features with `--no-default-features`.
+
+* `rocket_support`: [Rocket](https://rocket.rs/) is a web framework.
+  This features enables rocket integration and adds a [Request Guard](https://rocket.rs/v0.4/guide/requests/#request-guards).
+  Only Firestore Auth authorized requests can pass this guard.
+  This feature requires rust nightly, because Rocket itself requires nightly.
 
 ### Document operations
 
@@ -204,9 +206,9 @@ let c = Credentials::new(include_str!("firebase-service-account.json"),
 
 ### More information
 
-* [Firestore Auth: Background information](/doc/auth_background.md)
-* [Use your own authentication implementation](/doc/own_auth.md)
-* [Http Rocket Server integration](/doc/rocket_integration.md)
+* [Firestore Auth: Background information](doc/auth_background.md)
+* [Use your own authentication implementation](doc/own_auth.md)
+* [Http Rocket Server integration](doc/rocket_integration.md)
 * Build the documentation locally with `cargo +nightly doc --features external_doc,rocket_support`
 
 ## Testing

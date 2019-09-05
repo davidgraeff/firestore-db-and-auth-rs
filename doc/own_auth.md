@@ -1,4 +1,3 @@
-
 ### Use your own authentication implementation
 
 You do not need the `sessions` module for using the Firestore API of this crate.
