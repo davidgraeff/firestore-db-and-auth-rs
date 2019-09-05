@@ -8,7 +8,6 @@ use super::errors::{extract_google_api_error, FirebaseError, Result};
 use super::firebase_rest_to_rust::{document_to_pod, pod_to_document};
 use super::FirebaseAuthBearer;
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -63,23 +62,23 @@ where
 {
     let url = match document_id.as_ref() {
         Some(document_id) => firebase_url_extended(
-            auth.projectid(),
+            auth.project_id(),
             path,
             document_id.as_ref()
         ),
-        None => firebase_url(auth.projectid(), path),
+        None => firebase_url(auth.project_id(), path),
     };
 
     let firebase_document = pod_to_document(&document)?;
 
     let builder = if document_id.is_some() {
-        Client::new().patch(&url)
+        auth.client().patch(&url)
     } else {
-        Client::new().post(&url)
+        auth.client().post(&url)
     };
 
     let mut resp = builder
-        .bearer_auth(auth.bearer().to_owned())
+        .bearer_auth(auth.access_token().to_owned())
         .json(&firebase_document)
         .send()?;
 
@@ -139,9 +138,9 @@ where
 {
     let url = firebase_url_base(document_name.as_ref());
 
-    let mut resp = Client::new()
+    let mut resp = auth.client()
         .get(&url)
-        .bearer_auth(auth.bearer().to_owned())
+        .bearer_auth(auth.access_token().to_owned())
         .send()?;
 
     extract_google_api_error(&mut resp, || document_name.as_ref().to_owned())?;
@@ -164,7 +163,7 @@ where
 {
     let document_name = format!(
         "projects/{}/databases/(default)/documents/{}/{}",
-        auth.projectid(),
+        auth.project_id(),
         path,
         document_id.as_ref()
     );
@@ -227,7 +226,7 @@ where
 {
     let collection_id = collection_id.into();
     List {
-        url: firebase_url(auth.projectid(), &collection_id),
+        url: firebase_url(auth.project_id(), &collection_id),
         auth,
         next_page_token: None,
         documents: vec![],
@@ -243,9 +242,9 @@ fn get_new_data<'a>(
     url: &str,
     auth: &'a dyn FirebaseAuthBearer<'a>,
 ) -> Result<dto::ListDocumentsResponse> {
-    let mut resp = Client::new()
+    let mut resp = auth.client()
         .get(url)
-        .bearer_auth(auth.bearer().to_owned())
+        .bearer_auth(auth.access_token().to_owned())
         .send()?;
 
     extract_google_api_error(&mut resp, || collection_id.to_owned())?;
@@ -335,7 +334,7 @@ where
     for<'b> T: Deserialize<'b>,
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
-    let url = firebase_url_query(auth.projectid());
+    let url = firebase_url_query(auth.project_id());
 
     let query_request = dto::RunQueryRequest {
         structured_query: Some(dto::StructuredQuery {
@@ -362,9 +361,9 @@ where
         ..Default::default()
     };
 
-    let mut resp = Client::new()
+    let mut resp = auth.client()
         .post(&url)
-        .bearer_auth(auth.bearer().to_owned())
+        .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
         .send()?;
 
@@ -402,7 +401,7 @@ pub fn delete<'a, BEARER>(auth: &'a BEARER, path: &str, fail_if_not_existing: bo
 where
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
-    let url = firebase_url(auth.projectid(), path);
+    let url = firebase_url(auth.project_id(), path);
 
     let query_request = dto::Write {
         current_document: Some(dto::Precondition {
@@ -415,9 +414,9 @@ where
         ..Default::default()
     };
 
-    let mut resp = Client::new()
+    let mut resp = auth.client()
         .delete(&url)
-        .bearer_auth(auth.bearer().to_owned())
+        .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
         .send()?;
 

@@ -96,7 +96,7 @@ fn user_info_internal(
 /// - INVALID_ID_TOKEN
 /// - USER_NOT_FOUND
 pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
-    user_info_internal(session.bearer(), &session.api_key, &session.userid)
+    user_info_internal(session.access_token(), &session.api_key, &session.user_id)
 }
 
 #[inline]
@@ -117,5 +117,5 @@ fn user_remove_internal(auth: String, api_key: &str, firebase_user_id: &str) -> 
 /// - INVALID_ID_TOKEN
 /// - USER_NOT_FOUND
 pub fn user_remove(session: &user::Session) -> Result<()> {
-    user_remove_internal(session.bearer(), &session.api_key, &session.userid)
+    user_remove_internal(session.access_token(), &session.api_key, &session.user_id)
 }

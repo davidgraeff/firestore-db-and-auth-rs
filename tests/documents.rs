@@ -12,10 +12,10 @@ fn service_account_session() -> errors::Result<()> {
     cred.verify()?;
 
     let mut session = sessions::service_account::Session::new(cred).unwrap();
-    let b = session.bearer().to_owned();
+    let b = session.access_token().to_owned();
 
     // Check if cached value is used
-    assert_eq!(session.bearer(), b);
+    assert_eq!(session.access_token(), b);
 
     let obj = DemoDTO {
         a_string: "abcd".to_owned(),
@@ -72,13 +72,13 @@ fn user_account_session() -> errors::Result<()> {
         sessions::user::Session::by_refresh_token(&cred, &refresh_token)?
     };
 
-    assert_eq!(user_session.userid, TEST_USER_ID);
-    assert_eq!(user_session.projectid, cred.project_id);
+    assert_eq!(user_session.user_id, TEST_USER_ID);
+    assert_eq!(user_session.project_id(), cred.project_id);
 
     println!("user::Session::by_access_token");
-    let mut user_session = sessions::user::Session::by_access_token(&cred, &user_session.bearer)?;
+    let mut user_session = sessions::user::Session::by_access_token(&cred, &user_session.access_token_unchecked())?;
 
-    assert_eq!(user_session.userid, TEST_USER_ID);
+    assert_eq!(user_session.user_id, TEST_USER_ID);
 
     let obj = DemoDTO {
         a_string: "abc".to_owned(),

@@ -11,6 +11,7 @@ use std::slice::Iter;
 use biscuit::jwa::SignatureAlgorithm;
 use biscuit::{ClaimPresenceOptions, SingleOrMultiple, StringOrUri, ValidationOptions};
 use std::ops::Deref;
+use crate::errors::FirebaseError;
 
 type Error = super::errors::FirebaseError;
 
@@ -75,13 +76,27 @@ pub(crate) fn create_jwt_encoded<S: AsRef<str>>(
     Ok(jwt.encode(&secret.deref())?.encoded()?.encode())
 }
 
+/// Returns true if the access token (assumed to be a jwt) has expired
+///
+/// An error is returned if the given access token string is not a jwt
+pub(crate) fn is_expired(access_token: &str, tolerance_in_minutes: i64) -> Result<bool, FirebaseError> {
+    let token = AuthClaimsJWT::new_encoded(&access_token);
+    let claims = token.unverified_payload()?;
+    if let Some(expiry) = claims.registered.expiry.as_ref() {
+        let diff: Duration = Utc::now().signed_duration_since(expiry.deref().clone());
+        return Ok(diff.num_minutes() - tolerance_in_minutes > 0);
+    }
+
+    Ok(true)
+}
+
 /// Returns true if the jwt was updated and needs signing
 pub(crate) fn jwt_update_expiry_if(jwt: &mut AuthClaimsJWT, expire_in_minutes: i64) -> bool {
     let ref mut claims = jwt.payload_mut().unwrap().registered;
 
     let now = biscuit::Timestamp::from(Utc::now());
     if let Some(issued_at) = claims.issued_at.as_ref() {
-        let diff: Duration = Utc::now().time() - issued_at.time();
+        let diff: Duration = Utc::now().signed_duration_since(issued_at.deref().clone());
         if diff.num_minutes() > expire_in_minutes {
             claims.issued_at = Some(now);
         } else {
@@ -91,7 +106,7 @@ pub(crate) fn jwt_update_expiry_if(jwt: &mut AuthClaimsJWT, expire_in_minutes: i
         claims.issued_at = Some(now);
     }
 
-    return true;
+    true
 }
 
 pub(crate) fn create_jwt<S>(
@@ -102,8 +117,8 @@ pub(crate) fn create_jwt<S>(
     user_id: Option<String>,
     audience: &str,
 ) -> Result<AuthClaimsJWT, Error>
-where
-    S: AsRef<str>,
+    where
+        S: AsRef<str>,
 {
     use std::ops::Add;
     use std::str::FromStr;

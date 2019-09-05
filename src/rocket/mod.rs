@@ -21,7 +21,7 @@
 //! #[get("/hello")]
 //! fn hello<'r>(auth: FirestoreAuthSessionGuard) -> String {
 //!     // ApiKey is a single value tuple with a sessions::user::Session object inside
-//!    format!("you are logged in. user_id: {}", auth.0.userid)
+//!    format!("you are logged in. user_id: {}", auth.0.user_id)
 //! }
 //!
 //! #[get("/hello")]

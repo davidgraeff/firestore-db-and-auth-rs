@@ -8,9 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4] - 2019-09-05
 
+This release is about refining the API. 
+
+### Added
+- The user-session now also refreshes expired access tokens (if a refresh token is known).
+- Added "access_token_unchecked()" to the auth trait as a way to access the token without
+  invoking the refresh check.
+
 ### Changed
 - User sessions Session::by_user_id now requires a 2nd parameter: "with_refresh_token"
 - Accept String and &str in some places
+- Store the reqwest client in session objects and reuse it.
+  This also allows the library user to replace the client with a more specific one, that
+  for example handle proxies or certain ssl situations.
+  Successive document calls are way faster now.
+- Rename "bearer" to "access_token". Added "access_token_unchecked()" to the auth trait.
 
 ## [0.3.1] - 2019-09-05
 

@@ -5,20 +5,21 @@
 use super::credentials;
 use super::errors::{extract_google_api_error, FirebaseError};
 use super::jwt::{
-    create_jwt, jwt_update_expiry_if, verify_access_token, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
+    create_jwt, jwt_update_expiry_if, verify_access_token, is_expired, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
     JWT_AUDIENCE_IDENTITY,
 };
 use super::FirebaseAuthBearer;
+
+use chrono::Duration;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::ops::Deref;
+use std::cell::RefCell;
 use std::slice::Iter;
 
 pub mod user {
     use super::*;
     use credentials::Credentials;
-
-    use chrono::Duration;
-    use reqwest::Client;
-    use serde::{Deserialize, Serialize};
-    use std::ops::Deref;
 
     #[inline]
     fn token_endpoint(v: &str) -> String {
@@ -34,23 +35,64 @@ pub mod user {
     }
 
     /// An impersonated session.
-    /// If you access FireStore with such a session, FireStore rules might restrict access to data.
-    #[derive(Debug, Serialize, Deserialize)]
+    /// Firestore rules will restrict your access.
     pub struct Session {
-        pub userid: String,
+        /// The firebase auth user id
+        pub user_id: String,
+        /// The refresh token, if any. Such a token allows you to generate new, valid access tokens.
+        /// This library will handle this for you, if for example your current access token expired.
         pub refresh_token: Option<String>,
+        /// The firebase projects API key, as defined in the credentials object
         pub api_key: String,
-        pub bearer: String,
-        pub projectid: String,
+        access_token: RefCell<String>,
+        project_id: String,
+        /// The http client. Replace or modify the client if you have special demands like proxy support
+        pub client: reqwest::Client,
     }
 
     impl<'a> super::FirebaseAuthBearer<'a> for Session {
-        fn projectid(&'a self) -> &'a str {
-            &self.projectid
+        fn project_id(&'a self) -> &'a str {
+            &self.project_id
         }
-        fn bearer(&'a self) -> String {
-            self.bearer.clone()
+        /// Returns the current access token.
+        /// This method will automatically refresh your access token, if it has expired.
+        ///
+        /// If the refresh failed, this will
+        fn access_token(&'a self) -> String {
+            let jwt = self.access_token.borrow();
+            let jwt = jwt.as_str();
+
+            if is_expired(&jwt, 0).unwrap() { // Unwrap: the token is always valid at this point
+                if let Ok(response) = get_new_access_token(&self.api_key, jwt) {
+                    self.access_token.swap(&RefCell::new(response.id_token.clone()));
+                    return response.id_token;
+                } else {
+                    // Failed to refresh access token. Return an empty string
+                    return String::new();
+                }
+            }
+            return jwt.to_owned();
         }
+
+        fn access_token_unchecked(&'a self) -> String {
+            self.access_token.borrow().clone()
+        }
+
+        fn client(&'a self) -> &'a Client {
+            &self.client
+        }
+    }
+
+    fn get_new_access_token(api_key: &str, refresh_token: &str) -> Result<RefreshTokenToAccessTokenResponse, FirebaseError> {
+        let request_body = vec![
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+        ];
+
+        let url = refresh_to_access_endpoint(api_key);
+        let client = Client::new();
+        let ref mut response = client.post(&url).form(&request_body).send()?;
+        Ok(response.json()?)
     }
 
     #[allow(non_snake_case)]
@@ -145,21 +187,14 @@ pub mod user {
             credentials: &Credentials,
             refresh_token: &str,
         ) -> Result<Session, FirebaseError> {
-            let request_body = vec![
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token),
-            ];
-
-            let url = refresh_to_access_endpoint(&credentials.api_key);
-            let client = Client::new();
-            let ref mut response = client.post(&url).form(&request_body).send()?;
-            let r: RefreshTokenToAccessTokenResponse = response.json()?;
+            let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token)?;
             Ok(Session {
-                userid: r.user_id,
-                bearer: r.id_token,
+                user_id: r.user_id,
+                access_token: RefCell::new(r.id_token),
                 refresh_token: Some(r.refresh_token),
-                projectid: credentials.project_id.to_owned(),
+                project_id: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
+                client: reqwest::Client::new()
             })
         }
 
@@ -203,11 +238,12 @@ pub mod user {
             let r: CustomJwtToFirebaseIDResponse = r.json()?;
 
             Ok(Session {
-                userid: user_id.to_owned(),
-                bearer: r.idToken,
+                user_id: user_id.to_owned(),
+                access_token: RefCell::new(r.idToken),
                 refresh_token: r.refreshToken,
-                projectid: credentials.project_id.to_owned(),
+                project_id: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
+                client: reqwest::Client::new()
             })
         }
 
@@ -218,11 +254,12 @@ pub mod user {
             let result = verify_access_token(&credentials, firebase_tokenid)?
                 .ok_or(FirebaseError::Generic("Validation failed"))?;
             return Ok(Session {
-                userid: result.subject,
-                projectid: result.audience,
-                bearer: firebase_tokenid.to_owned(),
+                user_id: result.subject,
+                project_id: result.audience,
+                access_token: RefCell::new(firebase_tokenid.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
+                client: reqwest::Client::new()
             });
         }
     }
@@ -234,38 +271,48 @@ pub mod service_account {
     use credentials::Credentials;
 
     use chrono::Duration;
-    use serde::{Deserialize, Serialize};
     use std::cell::RefCell;
     use std::ops::Deref;
+    use reqwest::Client;
 
     /// Service account session
-    #[derive(Serialize, Deserialize)]
     pub struct Session {
+        /// The google credentials
         pub credentials: Credentials,
+        /// The http client. Replace or modify the client if you have special demands like proxy support
+        pub client: reqwest::Client,
         jwt: RefCell<AuthClaimsJWT>,
-        bearer_cache: RefCell<String>,
+        access_token: RefCell<String>,
     }
 
     impl<'a> super::FirebaseAuthBearer<'a> for Session {
-        fn projectid(&'a self) -> &'a str {
+        fn project_id(&'a self) -> &'a str {
             &self.credentials.project_id
         }
         /// Return the encoded jwt to be used as bearer token. If the jwt
         /// issue_at is older than 50 minutes, it will be updated to the current time.
-        fn bearer(&'a self) -> String {
+        fn access_token(&'a self) -> String {
             let mut jwt = self.jwt.borrow_mut();
 
             if jwt_update_expiry_if(&mut jwt, 50) {
                 if let Some(secret) = self.credentials.keys.secret.as_ref() {
                     if let Ok(v) = self.jwt.borrow().encode(&secret.deref()) {
                         if let Ok(v2) = v.encoded() {
-                            self.bearer_cache.swap(&RefCell::new(v2.encode()));
+                            self.access_token.swap(&RefCell::new(v2.encode()));
                         }
                     }
                 }
             }
 
-            self.bearer_cache.borrow().clone()
+            self.access_token.borrow().clone()
+        }
+
+        fn access_token_unchecked(&'a self) -> String {
+            self.access_token.borrow().clone()
+        }
+
+        fn client(&'a self) -> &'a Client {
+            &self.client
         }
     }
 
@@ -299,9 +346,10 @@ pub mod service_account {
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
             Ok(Session {
-                bearer_cache: RefCell::new(encoded),
+                access_token: RefCell::new(encoded),
                 jwt: RefCell::new(jwt),
                 credentials,
+                client: reqwest::Client::new()
             })
         }
     }
