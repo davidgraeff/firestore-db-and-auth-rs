@@ -220,10 +220,14 @@ pub struct List<'a, T, BEARER> {
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'collection_id' The document path / collection; For example "my_collection" or "a/nested/collection"
-pub fn list<'a, T, BEARER>(auth: &'a BEARER, collection_id: String) -> List<'a, T, BEARER>
+pub fn list<'a, T, BEARER>(
+    auth: &'a BEARER,
+    collection_id: impl Into<String>,
+) -> List<'a, T, BEARER>
 where
     for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
+    let collection_id = collection_id.into();
     List {
         url: format!(firebase_url!(), auth.projectid(), collection_id),
         auth,
