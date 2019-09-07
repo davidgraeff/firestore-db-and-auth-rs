@@ -44,27 +44,27 @@ pub mod user {
         pub refresh_token: Option<String>,
         /// The firebase projects API key, as defined in the credentials object
         pub api_key: String,
-        access_token: RefCell<String>,
-        project_id: String,
+        access_token_: RefCell<String>,
+        project_id_: String,
         /// The http client. Replace or modify the client if you have special demands like proxy support
         pub client: reqwest::Client,
     }
 
     impl<'a> super::FirebaseAuthBearer<'a> for Session {
         fn project_id(&'a self) -> &'a str {
-            &self.project_id
+            &self.project_id_
         }
         /// Returns the current access token.
         /// This method will automatically refresh your access token, if it has expired.
         ///
         /// If the refresh failed, this will
         fn access_token(&'a self) -> String {
-            let jwt = self.access_token.borrow();
+            let jwt = self.access_token_.borrow();
             let jwt = jwt.as_str();
 
             if is_expired(&jwt, 0).unwrap() { // Unwrap: the token is always valid at this point
                 if let Ok(response) = get_new_access_token(&self.api_key, jwt) {
-                    self.access_token.swap(&RefCell::new(response.id_token.clone()));
+                    self.access_token_.swap(&RefCell::new(response.id_token.clone()));
                     return response.id_token;
                 } else {
                     // Failed to refresh access token. Return an empty string
@@ -75,7 +75,7 @@ pub mod user {
         }
 
         fn access_token_unchecked(&'a self) -> String {
-            self.access_token.borrow().clone()
+            self.access_token_.borrow().clone()
         }
 
         fn client(&'a self) -> &'a Client {
@@ -193,9 +193,9 @@ pub mod user {
             let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token)?;
             Ok(Session {
                 user_id: r.user_id,
-                access_token: RefCell::new(r.id_token),
+                access_token_: RefCell::new(r.id_token),
                 refresh_token: Some(r.refresh_token),
-                project_id: credentials.project_id.to_owned(),
+                project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
                 client: reqwest::Client::new(),
             })
@@ -242,9 +242,9 @@ pub mod user {
 
             Ok(Session {
                 user_id: user_id.to_owned(),
-                access_token: RefCell::new(r.idToken),
+                access_token_: RefCell::new(r.idToken),
                 refresh_token: r.refreshToken,
-                project_id: credentials.project_id.to_owned(),
+                project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
                 client: reqwest::Client::new(),
             })
@@ -258,8 +258,8 @@ pub mod user {
                 .ok_or(FirebaseError::Generic("Validation failed"))?;
             Ok(Session {
                 user_id: result.subject,
-                project_id: result.audience,
-                access_token: RefCell::new(firebase_tokenid.to_owned()),
+                project_id_: result.audience,
+                access_token_: RefCell::new(firebase_tokenid.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
                 client: reqwest::Client::new(),
@@ -285,7 +285,7 @@ pub mod service_account {
         /// The http client. Replace or modify the client if you have special demands like proxy support
         pub client: reqwest::Client,
         jwt: RefCell<AuthClaimsJWT>,
-        access_token: RefCell<String>,
+        access_token_: RefCell<String>,
     }
 
     impl<'a> super::FirebaseAuthBearer<'a> for Session {
@@ -301,17 +301,17 @@ pub mod service_account {
                 if let Some(secret) = self.credentials.keys.secret.as_ref() {
                     if let Ok(v) = self.jwt.borrow().encode(&secret.deref()) {
                         if let Ok(v2) = v.encoded() {
-                            self.access_token.swap(&RefCell::new(v2.encode()));
+                            self.access_token_.swap(&RefCell::new(v2.encode()));
                         }
                     }
                 }
             }
 
-            self.access_token.borrow().clone()
+            self.access_token_.borrow().clone()
         }
 
         fn access_token_unchecked(&'a self) -> String {
-            self.access_token.borrow().clone()
+            self.access_token_.borrow().clone()
         }
 
         fn client(&'a self) -> &'a Client {
@@ -349,7 +349,7 @@ pub mod service_account {
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
             Ok(Session {
-                access_token: RefCell::new(encoded),
+                access_token_: RefCell::new(encoded),
                 jwt: RefCell::new(jwt),
                 credentials,
                 client: reqwest::Client::new(),
