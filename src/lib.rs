@@ -2,10 +2,6 @@
 #![cfg_attr(feature = "external_doc", feature(external_doc))]
 #![cfg_attr(feature = "external_doc", doc(include = "../readme.md"))]
 
-extern crate regex;
-extern crate ring;
-extern crate untrusted;
-
 pub mod credentials;
 pub mod documents;
 pub mod dto;

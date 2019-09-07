@@ -24,6 +24,12 @@ This release is about refining the API.
   Successive document calls are way faster now.
 - Rename "bearer" to "access_token". Added "access_token_unchecked()" to the auth trait.
 
+### Removed
+- Dependency on regex. A custom method is in place instead. 
+- Dependency on the deprecated rustc_serialize. Use base64 instead.
+- Dependency on untrusted: The ring crate interface takes slices directly now without untrusted wrappers.
+- Dependency on url. Unused.
+
 ## [0.3.1] - 2019-09-05
 
 ### Changed
