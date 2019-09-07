@@ -12,7 +12,7 @@ use crate::FirebaseAuthBearer;
 /// A federated services like Facebook, Github etc that the user has used to
 /// authenticated himself and that he associated with this firebase auth account.
 #[allow(non_snake_case)]
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ProviderUserInfo {
     pub providerId: String,
     pub federatedId: String,
@@ -22,7 +22,7 @@ pub struct ProviderUserInfo {
 
 /// Users id, email, display name and a few more information
 #[allow(non_snake_case)]
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct FirebaseAuthUser {
     pub localId: Option<String>,
     pub email: Option<String>,
@@ -44,7 +44,7 @@ pub struct FirebaseAuthUser {
 }
 
 /// Your user information query might return zero, one or more [`FirebaseAuthUser`] structures.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct FirebaseAuthUserResponse {
     pub kind: String,
     pub users: Vec<FirebaseAuthUser>,
