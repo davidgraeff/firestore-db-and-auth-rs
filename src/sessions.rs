@@ -71,7 +71,7 @@ pub mod user {
                     return String::new();
                 }
             }
-            return jwt.to_owned();
+            jwt.to_owned()
         }
 
         fn access_token_unchecked(&'a self) -> String {
@@ -154,7 +154,9 @@ pub mod user {
             if let Some(firebase_tokenid) = firebase_tokenid {
                 let r = Session::by_access_token(credentials, firebase_tokenid);
                 if r.is_ok() {
-                    return r;
+                    let mut r = r.unwrap();
+                    r.refresh_token = refresh_token.and_then(|f| Some(f.to_owned()));
+                    return Ok(r);
                 }
             }
 
@@ -166,7 +168,8 @@ pub mod user {
                 }
             }
 
-            // Check if refresh_token is already sufficient
+            // Neither refresh token nor access token worked or are provided.
+            // Try to get new new tokens for the given user_id via the REST API and the service-account credentials.
             if let Some(user_id) = user_id {
                 let r = Session::by_user_id(credentials, user_id, true);
                 if r.is_ok() {
@@ -194,7 +197,7 @@ pub mod user {
                 refresh_token: Some(r.refresh_token),
                 project_id: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new()
+                client: reqwest::Client::new(),
             })
         }
 
@@ -210,7 +213,7 @@ pub mod user {
         pub fn by_user_id(
             credentials: &Credentials,
             user_id: &str,
-            with_refresh_token: bool
+            with_refresh_token: bool,
         ) -> Result<Session, FirebaseError> {
             let scope: Option<Iter<String>> = None;
             let jwt = create_jwt(
@@ -243,7 +246,7 @@ pub mod user {
                 refresh_token: r.refreshToken,
                 project_id: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new()
+                client: reqwest::Client::new(),
             })
         }
 
@@ -253,14 +256,14 @@ pub mod user {
         ) -> Result<Session, FirebaseError> {
             let result = verify_access_token(&credentials, firebase_tokenid)?
                 .ok_or(FirebaseError::Generic("Validation failed"))?;
-            return Ok(Session {
+            Ok(Session {
                 user_id: result.subject,
                 project_id: result.audience,
                 access_token: RefCell::new(firebase_tokenid.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new()
-            });
+                client: reqwest::Client::new(),
+            })
         }
     }
 }
@@ -349,7 +352,7 @@ pub mod service_account {
                 access_token: RefCell::new(encoded),
                 jwt: RefCell::new(jwt),
                 credentials,
-                client: reqwest::Client::new()
+                client: reqwest::Client::new(),
             })
         }
     }

@@ -4,8 +4,9 @@
 
 use super::errors::{extract_google_api_error, Result};
 
-use super::sessions::user;
+use super::sessions::{user, service_account};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::FirebaseAuthBearer;
 use reqwest::Client;
@@ -45,15 +46,14 @@ pub struct FirebaseAuthUser {
 }
 
 /// Your user information query might return zero, one or more [`FirebaseAuthUser`] structures.
-#[allow(non_snake_case)]
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct FirebaseAuthUserResponse {
     pub kind: String,
     pub users: Vec<FirebaseAuthUser>,
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct UserRequest {
     pub idToken: String,
 }
@@ -67,7 +67,7 @@ impl UserRequest {
 #[inline]
 fn firebase_auth_url(v: &str, v2: &str) -> String {
     format!(
-        "https://www.googleapis.com/identitytoolkit/v3/relyingparty/{}?key={}",
+        "https://identitytoolkit.googleapis.com/v1/accounts:{}?key={}",
         v, v2
     )
 }
@@ -78,7 +78,7 @@ fn user_info_internal(
     api_key: &str,
     firebase_user_id: &str,
 ) -> Result<FirebaseAuthUserResponse> {
-    let url = firebase_auth_url("getAccountInfo", api_key);
+    let url = firebase_auth_url("lookup", api_key);
 
     let mut resp = Client::new()
         .post(&url)
@@ -101,7 +101,7 @@ pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
 
 #[inline]
 fn user_remove_internal(auth: String, api_key: &str, firebase_user_id: &str) -> Result<()> {
-    let url = firebase_auth_url("deleteAccount", api_key);
+    let url = firebase_auth_url("delete", api_key);
     let mut resp = Client::new()
         .post(&url)
         .json(&UserRequest::new(auth))
@@ -118,4 +118,40 @@ fn user_remove_internal(auth: String, api_key: &str, firebase_user_id: &str) -> 
 /// - USER_NOT_FOUND
 pub fn user_remove(session: &user::Session) -> Result<()> {
     user_remove_internal(session.access_token(), &session.api_key, &session.user_id)
+}
+
+
+#[allow(non_snake_case)]
+#[derive(Default, Deserialize)]
+struct CreateUserResponse {
+    pub localId: String,
+    pub idToken: String,
+    // access token
+    pub refreshToken: String,
+    pub email: String,
+}
+
+/// Creates the firebase auth user with the given email and password and returns
+/// a user session.
+///
+/// Error codes:
+/// EMAIL_EXISTS: The email address is already in use by another account.
+/// OPERATION_NOT_ALLOWED: Password sign-in is disabled for this project.
+/// TOO_MANY_ATTEMPTS_TRY_LATER: We have blocked all requests from this device due to unusual activity. Try again later.
+pub fn create_user(session: &service_account::Session, email: &str, password: &str) -> Result<user::Session> {
+    let url = firebase_auth_url("signUp", &session.credentials.api_key);
+    let mut resp = Client::new()
+        .post(&url)
+        .json(&json!({
+            "email": email,
+            "password": password,
+            "returnSecureToken": true,
+        }))
+        .send()?;
+
+    extract_google_api_error(&mut resp, || email.to_owned())?;
+
+    let resp: CreateUserResponse = resp.json()?;
+
+    Ok(user::Session::new(&session.credentials, Some(&resp.localId), Some(&resp.idToken), Some(&resp.refreshToken))?)
 }

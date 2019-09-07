@@ -14,6 +14,7 @@ This release is about refining the API.
 - The user-session now also refreshes expired access tokens (if a refresh token is known).
 - Added "access_token_unchecked()" to the auth trait as a way to access the token without
   invoking the refresh check.
+- Add user-by-email management method "create_user".
 
 ### Changed
 - User sessions Session::by_user_id now requires a 2nd parameter: "with_refresh_token"
