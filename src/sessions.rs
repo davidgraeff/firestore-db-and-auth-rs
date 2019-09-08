@@ -5,7 +5,7 @@
 use super::credentials;
 use super::errors::{extract_google_api_error, FirebaseError};
 use super::jwt::{
-    create_jwt, jwt_update_expiry_if, verify_access_token, is_expired, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
+    create_jwt, is_expired, jwt_update_expiry_if, verify_access_token, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
     JWT_AUDIENCE_IDENTITY,
 };
 use super::FirebaseAuthBearer;
@@ -13,8 +13,8 @@ use super::FirebaseAuthBearer;
 use chrono::Duration;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::slice::Iter;
 
 pub mod user {
@@ -62,7 +62,8 @@ pub mod user {
             let jwt = self.access_token_.borrow();
             let jwt = jwt.as_str();
 
-            if is_expired(&jwt, 0).unwrap() { // Unwrap: the token is always valid at this point
+            if is_expired(&jwt, 0).unwrap() {
+                // Unwrap: the token is always valid at this point
                 if let Ok(response) = get_new_access_token(&self.api_key, jwt) {
                     self.access_token_.swap(&RefCell::new(response.id_token.clone()));
                     return response.id_token;
@@ -83,11 +84,11 @@ pub mod user {
         }
     }
 
-    fn get_new_access_token(api_key: &str, refresh_token: &str) -> Result<RefreshTokenToAccessTokenResponse, FirebaseError> {
-        let request_body = vec![
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh_token),
-        ];
+    fn get_new_access_token(
+        api_key: &str,
+        refresh_token: &str,
+    ) -> Result<RefreshTokenToAccessTokenResponse, FirebaseError> {
+        let request_body = vec![("grant_type", "refresh_token"), ("refresh_token", refresh_token)];
 
         let url = refresh_to_access_endpoint(api_key);
         let client = Client::new();
@@ -186,10 +187,7 @@ pub mod user {
         /// - `credentials` The credentials
         /// - `refresh_token` A refresh token.
         ///
-        pub fn by_refresh_token(
-            credentials: &Credentials,
-            refresh_token: &str,
-        ) -> Result<Session, FirebaseError> {
+        pub fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session, FirebaseError> {
             let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token)?;
             Ok(Session {
                 user_id: r.user_id,
@@ -228,9 +226,7 @@ pub mod user {
                 .keys
                 .secret
                 .as_ref()
-                .ok_or(FirebaseError::Generic(
-                    "No private key added via add_keypair_key!",
-                ))?;
+                .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
             let mut r = Client::new()
@@ -250,10 +246,7 @@ pub mod user {
             })
         }
 
-        pub fn by_access_token(
-            credentials: &Credentials,
-            firebase_tokenid: &str,
-        ) -> Result<Session, FirebaseError> {
+        pub fn by_access_token(credentials: &Credentials, firebase_tokenid: &str) -> Result<Session, FirebaseError> {
             let result = verify_access_token(&credentials, firebase_tokenid)?
                 .ok_or(FirebaseError::Generic("Validation failed"))?;
             Ok(Session {
@@ -274,9 +267,9 @@ pub mod service_account {
     use credentials::Credentials;
 
     use chrono::Duration;
+    use reqwest::Client;
     use std::cell::RefCell;
     use std::ops::Deref;
-    use reqwest::Client;
 
     /// Service account session
     pub struct Session {
@@ -343,9 +336,7 @@ pub mod service_account {
                 .keys
                 .secret
                 .as_ref()
-                .ok_or(FirebaseError::Generic(
-                    "No private key added via add_keypair_key!",
-                ))?;
+                .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
             Ok(Session {

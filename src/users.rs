@@ -4,7 +4,7 @@
 
 use super::errors::{extract_google_api_error, Result};
 
-use super::sessions::{user, service_account};
+use super::sessions::{service_account, user};
 use serde::{Deserialize, Serialize};
 
 use crate::FirebaseAuthBearer;
@@ -58,10 +58,7 @@ struct UserRequest {
 
 #[inline]
 fn firebase_auth_url(v: &str, v2: &str) -> String {
-    format!(
-        "https://identitytoolkit.googleapis.com/v1/accounts:{}?key={}",
-        v, v2
-    )
+    format!("https://identitytoolkit.googleapis.com/v1/accounts:{}?key={}", v, v2)
 }
 
 /// Retrieve information about the firebase auth user associated with the given user session
@@ -72,9 +69,12 @@ fn firebase_auth_url(v: &str, v2: &str) -> String {
 pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
     let url = firebase_auth_url("lookup", &session.api_key);
 
-    let mut resp = session.client()
+    let mut resp = session
+        .client()
         .post(&url)
-        .json(&UserRequest { idToken: session.access_token() })
+        .json(&UserRequest {
+            idToken: session.access_token(),
+        })
         .send()?;
 
     extract_google_api_error(&mut resp, || session.user_id.to_owned())?;
@@ -89,15 +89,17 @@ pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
 /// - USER_NOT_FOUND
 pub fn user_remove(session: &user::Session) -> Result<()> {
     let url = firebase_auth_url("delete", &session.api_key);
-    let mut resp = session.client()
+    let mut resp = session
+        .client()
         .post(&url)
-        .json(&UserRequest { idToken: session.access_token() })
+        .json(&UserRequest {
+            idToken: session.access_token(),
+        })
         .send()?;
 
     extract_google_api_error(&mut resp, || session.user_id.to_owned())?;
     Ok({})
 }
-
 
 #[allow(non_snake_case)]
 #[derive(Default, Deserialize)]
@@ -117,18 +119,27 @@ struct SignInUpUserRequest {
 
 fn sign_up_in(session: &service_account::Session, email: &str, password: &str, action: &str) -> Result<user::Session> {
     let url = firebase_auth_url(action, &session.credentials.api_key);
-    let mut resp = session.client()
+    let mut resp = session
+        .client()
         .post(&url)
-        .json(&SignInUpUserRequest { email: email.to_owned(), password: password.to_owned(), returnSecureToken: true })
+        .json(&SignInUpUserRequest {
+            email: email.to_owned(),
+            password: password.to_owned(),
+            returnSecureToken: true,
+        })
         .send()?;
 
     extract_google_api_error(&mut resp, || email.to_owned())?;
 
     let resp: SignInUpUserResponse = resp.json()?;
 
-    Ok(user::Session::new(&session.credentials, Some(&resp.localId), Some(&resp.idToken), Some(&resp.refreshToken))?)
+    Ok(user::Session::new(
+        &session.credentials,
+        Some(&resp.localId),
+        Some(&resp.idToken),
+        Some(&resp.refreshToken),
+    )?)
 }
-
 
 /// Creates the firebase auth user with the given email and password and returns
 /// a user session.

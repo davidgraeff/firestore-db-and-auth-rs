@@ -14,3 +14,5 @@ jobs:
       - uses: actions/checkout@master
       - name: Check for leftover println
         run: ./tests/left_over_println.sh
+      - name: Check formatting
+        run: cargo fmt --all -- --check

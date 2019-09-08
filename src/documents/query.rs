@@ -41,8 +41,8 @@ pub fn query<'a, BEARER>(
     operator: dto::FieldOperator,
     field: &str,
 ) -> Result<Query>
-    where
-            for<'c> BEARER: FirebaseAuthBearer<'c>,
+where
+    for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let url = firebase_url_query(auth.project_id());
     let value = crate::firebase_rest_to_rust::serde_value_to_firebase_value(&value);
@@ -69,7 +69,8 @@ pub fn query<'a, BEARER>(
         ..Default::default()
     };
 
-    let mut resp = auth.client()
+    let mut resp = auth
+        .client()
         .post(&url)
         .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
@@ -81,7 +82,6 @@ pub fn query<'a, BEARER>(
 
     Ok(Query(json.unwrap_or_default().into_iter()))
 }
-
 
 /// This type is returned as a result by [`query`].
 /// Use it as an iterator. The query API returns a list of document references, not the documents itself.

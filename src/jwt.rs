@@ -8,15 +8,14 @@ use chrono::{Duration, Utc};
 use std::collections::HashSet;
 use std::slice::Iter;
 
+use crate::errors::FirebaseError;
 use biscuit::jwa::SignatureAlgorithm;
 use biscuit::{ClaimPresenceOptions, SingleOrMultiple, StringOrUri, ValidationOptions};
 use std::ops::Deref;
-use crate::errors::FirebaseError;
 
 type Error = super::errors::FirebaseError;
 
-pub static JWT_AUDIENCE_FIRESTORE: &str =
-    "https://firestore.googleapis.com/google.firestore.v1.Firestore";
+pub static JWT_AUDIENCE_FIRESTORE: &str = "https://firestore.googleapis.com/google.firestore.v1.Firestore";
 pub static JWT_AUDIENCE_IDENTITY: &str =
     "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit";
 
@@ -117,8 +116,8 @@ pub(crate) fn create_jwt<S>(
     user_id: Option<String>,
     audience: &str,
 ) -> Result<AuthClaimsJWT, Error>
-    where
-        S: AsRef<str>,
+where
+    S: AsRef<str>,
 {
     use std::ops::Add;
     use std::str::FromStr;

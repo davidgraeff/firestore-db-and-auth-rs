@@ -16,8 +16,8 @@ pub mod rocket;
 
 // Forward declarations
 pub use credentials::Credentials;
-pub use sessions::user::Session as UserSession;
 pub use sessions::service_account::Session as ServiceSession;
+pub use sessions::user::Session as UserSession;
 
 /// Authentication trait.
 ///

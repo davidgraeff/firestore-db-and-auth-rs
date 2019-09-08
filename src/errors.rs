@@ -59,10 +59,7 @@ impl std::convert::From<ring::error::KeyRejected> for FirebaseError {
 
 impl std::convert::From<serde_json::Error> for FirebaseError {
     fn from(error: serde_json::Error) -> Self {
-        FirebaseError::Ser {
-            doc: None,
-            ser: error,
-        }
+        FirebaseError::Ser { doc: None, ser: error }
     }
 }
 
@@ -155,10 +152,7 @@ struct GoogleRESTApiErrorWrapper {
 /// Arguments:
 /// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case
 /// - context: A function that will be called in an error case that returns a context string
-pub(crate) fn extract_google_api_error(
-    response: &mut reqwest::Response,
-    context: impl Fn() -> String,
-) -> Result<()> {
+pub(crate) fn extract_google_api_error(response: &mut reqwest::Response, context: impl Fn() -> String) -> Result<()> {
     if response.status() == 200 {
         // The boring case
         return Ok(());

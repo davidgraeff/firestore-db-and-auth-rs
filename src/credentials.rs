@@ -10,9 +10,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::sync::Arc;
 
-use super::jwt::{
-    create_jwt_encoded, download_google_jwks, verify_access_token, JWKSetDTO, JWT_AUDIENCE_IDENTITY,
-};
+use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSetDTO, JWT_AUDIENCE_IDENTITY};
 use crate::errors::FirebaseError;
 
 type Error = super::errors::FirebaseError;
@@ -60,7 +58,8 @@ impl Clone for Keys {
 pub fn pem_to_der(pem_file_contents: &str) -> Result<Vec<u8>, Error> {
     use base64::decode;
 
-    let pem_file_contents = pem_file_contents.find("-----BEGIN")
+    let pem_file_contents = pem_file_contents
+        .find("-----BEGIN")
         // Cut off the first BEGIN part
         .and_then(|i| Some(&pem_file_contents[i + 10..]))
         // Find the trailing ---- after BEGIN and cut that off
@@ -68,11 +67,14 @@ pub fn pem_to_der(pem_file_contents: &str) -> Result<Vec<u8>, Error> {
         // Cut off -----END
         .and_then(|str| str.rfind("-----END").and_then(|i| Some(&str[..i])));
     if pem_file_contents.is_none() {
-        return Err(FirebaseError::Generic("Invalid private key in credentials file. Must be valid PEM."));
+        return Err(FirebaseError::Generic(
+            "Invalid private key in credentials file. Must be valid PEM.",
+        ));
     }
 
     let base64_body = pem_file_contents.unwrap().replace("\n", "");
-    Ok(decode(&base64_body).map_err(|_| FirebaseError::Generic("Invalid private key in credentials file. Expected Base64 data."))?)
+    Ok(decode(&base64_body)
+        .map_err(|_| FirebaseError::Generic("Invalid private key in credentials file. Expected Base64 data."))?)
 }
 
 #[test]
@@ -83,7 +85,13 @@ FIdrhIN757eq/1Ry/VhZALBXAveg+lt+ui/9EHtYPJH1A9NyyAwChs0UCRWqkkEo
 Amtz4dJQ1YlGi0/BGhK2lg==
 -----END PRIVATE KEY-----
 "#;
-    const EXPECTED: [u8;112] = [48, 130, 4, 188, 2, 1, 0, 48, 13, 6, 9, 42, 134, 72, 134, 247, 13, 1, 1, 1, 5, 0, 4, 130, 4, 166, 48, 130, 4, 162, 2, 1, 0, 2, 130, 1, 1, 0, 147, 110, 223, 81, 179, 105, 226, 200, 132, 68, 20, 135, 107, 132, 131, 123, 231, 183, 170, 255, 84, 114, 253, 88, 89, 0, 176, 87, 2, 247, 160, 250, 91, 126, 186, 47, 253, 16, 123, 88, 60, 145, 245, 3, 211, 114, 200, 12, 2, 134, 205, 20, 9, 21, 170, 146, 65, 40, 2, 107, 115, 225, 210, 80, 213, 137, 70, 139, 79, 193, 26, 18, 182, 150];
+    const EXPECTED: [u8; 112] = [
+        48, 130, 4, 188, 2, 1, 0, 48, 13, 6, 9, 42, 134, 72, 134, 247, 13, 1, 1, 1, 5, 0, 4, 130, 4, 166, 48, 130, 4,
+        162, 2, 1, 0, 2, 130, 1, 1, 0, 147, 110, 223, 81, 179, 105, 226, 200, 132, 68, 20, 135, 107, 132, 131, 123,
+        231, 183, 170, 255, 84, 114, 253, 88, 89, 0, 176, 87, 2, 247, 160, 250, 91, 126, 186, 47, 253, 16, 123, 88, 60,
+        145, 245, 3, 211, 114, 200, 12, 2, 134, 205, 20, 9, 21, 170, 146, 65, 40, 2, 107, 115, 225, 210, 80, 213, 137,
+        70, 139, 79, 193, 26, 18, 182, 150,
+    ];
 
     assert_eq!(&EXPECTED[..], &pem_to_der(INPUT).unwrap()[..]);
 }

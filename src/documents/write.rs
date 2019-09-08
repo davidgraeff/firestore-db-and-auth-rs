@@ -17,7 +17,7 @@ pub struct WriteOptions {
     /// If this is set instead of overwriting all fields of a target document, only the given fields will be merged.
     /// This only works if your document type has Option fields.
     /// The write will fail, if no document_id is given or the target document does not exist yet.
-    pub merge: bool
+    pub merge: bool,
 }
 
 ///
@@ -85,16 +85,12 @@ pub fn write<'a, T, BEARER>(
     document: &T,
     options: WriteOptions,
 ) -> Result<WriteResult>
-    where
-        T: Serialize,
-        BEARER: FirebaseAuthBearer<'a>,
+where
+    T: Serialize,
+    BEARER: FirebaseAuthBearer<'a>,
 {
     let mut url = match document_id.as_ref() {
-        Some(document_id) => firebase_url_extended(
-            auth.project_id(),
-            path,
-            document_id.as_ref(),
-        ),
+        Some(document_id) => firebase_url_extended(auth.project_id(), path, document_id.as_ref()),
         None => firebase_url(auth.project_id(), path),
     };
 
@@ -116,17 +112,21 @@ pub fn write<'a, T, BEARER>(
         .json(&firebase_document)
         .send()?;
 
-    extract_google_api_error(&mut resp, || document_id.as_ref().and_then(|f| Some(f.as_ref().to_owned())).or(Some(String::new())).unwrap())?;
+    extract_google_api_error(&mut resp, || {
+        document_id
+            .as_ref()
+            .and_then(|f| Some(f.as_ref().to_owned()))
+            .or(Some(String::new()))
+            .unwrap()
+    })?;
 
     let result_document: dto::Document = resp.json()?;
-    let doc_path = result_document.name.ok_or_else(|| {
-        FirebaseError::Generic("Resulting document does not contain a 'name' field")
-    })?;
+    let doc_path = result_document
+        .name
+        .ok_or_else(|| FirebaseError::Generic("Resulting document does not contain a 'name' field"))?;
     let document_id = Path::new(&doc_path)
         .file_name()
-        .ok_or_else(|| {
-            FirebaseError::Generic("Resulting documents 'name' field is not a valid path")
-        })?
+        .ok_or_else(|| FirebaseError::Generic("Resulting documents 'name' field is not a valid path"))?
         .to_str()
         .ok_or_else(|| FirebaseError::Generic("No valid unicode in 'name' field"))?
         .to_owned();
@@ -134,9 +134,7 @@ pub fn write<'a, T, BEARER>(
     let create_time = match result_document.create_time {
         Some(f) => Some(
             chrono::DateTime::parse_from_rfc3339(&f)
-                .map_err(|_| {
-                    FirebaseError::Generic("Failed to parse rfc3339 date from 'create_time' field")
-                })?
+                .map_err(|_| FirebaseError::Generic("Failed to parse rfc3339 date from 'create_time' field"))?
                 .with_timezone(&chrono::Utc),
         ),
         None => None,
@@ -144,9 +142,7 @@ pub fn write<'a, T, BEARER>(
     let update_time = match result_document.update_time {
         Some(f) => Some(
             chrono::DateTime::parse_from_rfc3339(&f)
-                .map_err(|_| {
-                    FirebaseError::Generic("Failed to parse rfc3339 date from 'update_time' field")
-                })?
+                .map_err(|_| FirebaseError::Generic("Failed to parse rfc3339 date from 'update_time' field"))?
                 .with_timezone(&chrono::Utc),
         ),
         None => None,

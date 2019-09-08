@@ -32,7 +32,8 @@ pub use read::*;
 /// [`Iterator`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html
 pub trait JoinableIterator: Iterator {
     fn join(&mut self, sep: &str) -> String
-        where Self::Item: std::fmt::Display
+    where
+        Self::Item: std::fmt::Display,
     {
         use std::fmt::Write;
         match self.next() {
@@ -54,10 +55,12 @@ pub trait JoinableIterator: Iterator {
 
 impl<'a, VALUE> JoinableIterator for std::collections::hash_map::Keys<'a, String, VALUE> {}
 
-
 #[inline]
 fn firebase_url_query(v1: &str) -> String {
-    format!("https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:runQuery", v1)
+    format!(
+        "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:runQuery",
+        v1
+    )
 }
 
 #[inline]
@@ -67,14 +70,19 @@ fn firebase_url_base(v1: &str) -> String {
 
 #[inline]
 fn firebase_url_extended(v1: &str, v2: &str, v3: &str) -> String {
-    format!("https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/{}/{}", v1, v2, v3)
+    format!(
+        "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/{}/{}",
+        v1, v2, v3
+    )
 }
 
 #[inline]
 fn firebase_url(v1: &str, v2: &str) -> String {
-    format!("https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/{}?", v1, v2)
+    format!(
+        "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/{}?",
+        v1, v2
+    )
 }
-
 
 /// Converts an absolute path like "projects/{PROJECT_ID}/databases/(default)/documents/my_collection/document_id"
 /// into a relative document path like "my_collection/document_id"
@@ -86,8 +94,10 @@ pub fn abs_to_rel(path: &str) -> &str {
 
 #[test]
 fn abs_to_rel_test() {
-    assert_eq!(abs_to_rel("projects/{PROJECT_ID}/databases/(default)/documents/my_collection/document_id"),
-               "my_collection/document_id");
+    assert_eq!(
+        abs_to_rel("projects/{PROJECT_ID}/databases/(default)/documents/my_collection/document_id"),
+        "my_collection/document_id"
+    );
 }
 
 ///
@@ -101,8 +111,8 @@ fn abs_to_rel_test() {
 /// * 'path' The relative collection path and document id, for example "my_collection/document_id"
 /// * 'fail_if_not_existing' If true this method will return an error if the document does not exist.
 pub fn delete<'a, BEARER>(auth: &'a BEARER, path: &str, fail_if_not_existing: bool) -> Result<()>
-    where
-            for<'c> BEARER: FirebaseAuthBearer<'c>,
+where
+    for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let url = firebase_url(auth.project_id(), path);
 
@@ -117,7 +127,8 @@ pub fn delete<'a, BEARER>(auth: &'a BEARER, path: &str, fail_if_not_existing: bo
         ..Default::default()
     };
 
-    let mut resp = auth.client()
+    let mut resp = auth
+        .client()
         .delete(&url)
         .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
