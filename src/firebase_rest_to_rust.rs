@@ -28,7 +28,7 @@ fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value {
     if let Some(timestamp_value) = v.timestamp_value.as_ref() {
         return Value::String(timestamp_value.clone());
     } else if let Some(integer_value) = v.integer_value.as_ref() {
-        if let Ok(four) = integer_value.parse::<u32>() {
+        if let Ok(four) = integer_value.parse::<i64>() {
             return Value::Number(four.into());
         }
     } else if let Some(double_value) = v.double_value {
