@@ -49,25 +49,23 @@ impl<'a, 'r> request::FromRequest<'a, 'r> for FirestoreAuthSessionGuard {
             .map(|f| f.to_owned())
             .or(request.get_query_value("auth").and_then(|r| r.ok()));
         if r.is_none() {
-            return Outcome::Failure((Status::BadRequest, FirebaseError::Generic("")));
+            return Outcome::Forward(());
         }
-        let db = request
-            .guard::<State<Credentials>>()
-            .success_or(FirebaseError::Generic(""));
-        if db.is_err() {
-            return Outcome::Failure((Status::BadRequest, db.err().unwrap()));
-        }
+
+        // You MUST make the credentials object available as managed state to rocket!
+        let db = match request.guard::<State<Credentials>>() {
+            Ok(db) => db,
+            _ => return Outcome::Failure((Status::InternalServerError,FirebaseError::Generic("Firestore credentials not set!") ))
+        };
+
         let bearer = r.unwrap();
         if !bearer.starts_with("Bearer ") {
-            return Outcome::Failure((
-                Status::BadRequest,
-                FirebaseError::Generic("Only bearer authorization accepted"),
-            ));
+            return Outcome::Forward(());
         }
         let bearer = &bearer[7..];
         let session = sessions::user::Session::by_access_token(&db.unwrap(), bearer);
         if session.is_err() {
-            return Outcome::Failure((Status::Unauthorized, session.err().unwrap()));
+            return Outcome::Forward(());
         }
         Outcome::Success(FirestoreAuthSessionGuard(session.unwrap()))
     }
