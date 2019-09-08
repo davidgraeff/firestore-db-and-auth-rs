@@ -16,7 +16,7 @@ use crate::errors::FirebaseError;
 type Error = super::errors::FirebaseError;
 
 /// This is not defined in the json file and computed
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Keys {
     pub pub_key: BTreeMap<String, Arc<biscuit::jws::Secret>>,
     pub secret: Option<Arc<biscuit::jws::Secret>>,
@@ -43,15 +43,6 @@ pub struct Credentials {
     pub api_key: String,
     #[serde(default, skip)]
     pub(crate) keys: Keys,
-}
-
-impl Clone for Keys {
-    fn clone(&self) -> Self {
-        Self {
-            pub_key: Default::default(),
-            secret: None,
-        }
-    }
 }
 
 /// Converts a PEM (ascii base64) encoded private key into the binary der representation
