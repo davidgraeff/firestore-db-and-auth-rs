@@ -104,7 +104,7 @@ fn user_account_session() -> errors::Result<()> {
     assert_eq!(user_session.project_id(), cred.project_id);
 
     println!("user::Session::by_access_token");
-    let mut user_session = sessions::user::Session::by_access_token(&cred, &user_session.access_token_unchecked())?;
+    let user_session = sessions::user::Session::by_access_token(&cred, &user_session.access_token_unchecked())?;
 
     assert_eq!(user_session.user_id, TEST_USER_ID);
 
@@ -116,7 +116,7 @@ fn user_account_session() -> errors::Result<()> {
 
     // Test writing
     println!("user::Session documents::write");
-    let result = documents::write(&mut user_session, "tests", Some("test"), &obj, documents::WriteOptions::default())?;
+    let result = documents::write(&user_session, "tests", Some("test"), &obj, documents::WriteOptions::default())?;
     assert_eq!(result.document_id, "test");
     let duration = chrono::Utc::now().signed_duration_since(result.update_time.unwrap());
     assert!(
@@ -129,25 +129,26 @@ fn user_account_session() -> errors::Result<()> {
 
     // Test reading
     println!("user::Session documents::read");
-    let read: DemoDTO = documents::read(&mut user_session, "tests", "test")?;
+    let read: DemoDTO = documents::read(&user_session, "tests", "test")?;
 
     assert_eq!(read.a_string, "abc");
     assert_eq!(read.an_int, 12);
 
     // Query for all documents with field "a_string" and value "abc"
-    let results: Vec<DemoDTO> = documents::query(
-        &mut user_session,
+    let results: Vec<dto::Document> = documents::query(
+        &user_session,
         "tests",
-        "abc",
+        "abc".into(),
         dto::FieldOperator::EQUAL,
         "a_string",
-    )?;
+    )?.collect();
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].a_string, "abc");
+    let doc : DemoDTO= documents::read_by_name(&user_session,results.get(0).unwrap().name.as_ref().unwrap())?;
+    assert_eq!(doc.a_string, "abc");
 
     let mut count = 0;
     let list_it: documents::List<DemoDTO, _> =
-        documents::list(&mut user_session, "tests".to_owned());
+        documents::list(&user_session, "tests".to_owned());
     for _doc in list_it {
         count += 1;
     }
@@ -155,7 +156,7 @@ fn user_account_session() -> errors::Result<()> {
 
     // test if the call fails for a non existing document
     println!("user::Session documents::delete");
-    let r = documents::delete(&mut user_session, "tests/non_existing", true);
+    let r = documents::delete(&user_session, "tests/non_existing", true);
     assert!(r.is_err());
     match r.err().unwrap() {
         FirebaseError::APIError(code, message, context) => {
@@ -166,18 +167,29 @@ fn user_account_session() -> errors::Result<()> {
         _ => panic!("Expected an APIError"),
     };
 
-    documents::delete(&mut user_session, "tests/test", false)?;
+    documents::delete(&user_session, "tests/test", false)?;
 
     // Check if document is indeed removed
     println!("user::Session documents::query");
-    let results: Vec<DemoDTO> = documents::query(
-        &mut user_session,
+    let count = documents::query(
+        &user_session,
         "tests",
-        "abc",
+        "abc".into(),
         dto::FieldOperator::EQUAL,
         "a_string",
-    )?;
-    assert_eq!(results.len(), 0);
+    )?.count();
+    assert_eq!(count, 0);
+
+    println!("user::Session documents::query for f64");
+    let f: f64 = 13.37;
+    let count = documents::query(
+        &user_session,
+        "tests",
+        f.into(),
+        dto::FieldOperator::EQUAL,
+        "a_float",
+    )?.count();
+    assert_eq!(count, 0);
 
     Ok(())
 }

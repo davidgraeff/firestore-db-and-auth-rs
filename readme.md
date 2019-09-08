@@ -106,8 +106,19 @@ In the following example the collection "tests" is queried for document(s) with 
 ```rust
 use firestore_db_and_auth::{documents, dto};
 
-let objs : Vec<DemoDTO> = documents::query(&session, "tests", "Sam Weiss", dto::FieldOperator::EQUAL, "id")?;
+let values = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id")?;
+for metadata in values {
+    println!("id: {}, created: {}, updated: {}", metadata.name.as_ref().unwrap(), metadata.create_time.as_ref().unwrap(), metadata.update_time.as_ref().unwrap());
+    // Fetch the actual document
+    // The data is wrapped in a Result<> because fetching new data could have failed
+    let doc : DemoDTO = documents::read_by_name(&session, metadata.name.as_ref().unwrap())?;
+    println!("{:?}", doc);
+}
 ```
+
+Did you notice the `into` on `"Sam Weiss".into()`?
+Firestore stores document fields strongly typed.
+The query value can be a string, an integer, a floating point number and potentially even an array or object (not tested).
 
 *Note:* The query method returns a vector, because a query potentially returns multiple matching documents.
 

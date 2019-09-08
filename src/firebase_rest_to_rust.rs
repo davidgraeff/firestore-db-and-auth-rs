@@ -24,7 +24,7 @@ use serde_json::{map::Map, Number};
 /// This is a low level API. You probably want to use [`crate::documents`] instead.
 ///
 /// This method works recursively!
-fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value {
+pub(crate) fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value {
     if let Some(timestamp_value) = v.timestamp_value.as_ref() {
         return Value::String(timestamp_value.clone());
     } else if let Some(integer_value) = v.integer_value.as_ref() {
@@ -63,7 +63,7 @@ fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value {
 /// This is a low level API. You probably want to use [`crate::documents`] instead.
 ///
 /// This method works recursively!
-fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value {
+pub(crate) fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value {
     if v.is_f64() {
         return dto::Value {
             double_value: Some(v.as_f64().unwrap()),
@@ -159,4 +159,79 @@ where
         fields: Some(serde_value_to_firebase_value(&v).map_value.unwrap().fields),
         ..Default::default()
     })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use super::Result;
+    use serde::{Deserialize, Serialize};
+    use std::collections::HashMap;
+
+    #[derive(Serialize, Deserialize)]
+    struct DemoPod {
+        integer_test: u32,
+        boolean_test: bool,
+        string_test: String,
+    }
+
+    #[test]
+    fn test_document_to_pod() -> Result<()> {
+        let mut map: HashMap<String, dto::Value> = HashMap::new();
+        map.insert(
+            "integer_test".to_owned(),
+            dto::Value {
+                integer_value: Some("12".to_owned()),
+                ..Default::default()
+            },
+        );
+        map.insert(
+            "boolean_test".to_owned(),
+            dto::Value {
+                boolean_value: Some(true),
+                ..Default::default()
+            },
+        );
+        map.insert(
+            "string_test".to_owned(),
+            dto::Value {
+                string_value: Some("abc".to_owned()),
+                ..Default::default()
+            },
+        );
+        let t = dto::Document {
+            fields: Some(map),
+            ..Default::default()
+        };
+        let firebase_doc: DemoPod = document_to_pod(&t)?;
+        assert_eq!(firebase_doc.string_test, "abc");
+        assert_eq!(firebase_doc.integer_test, 12);
+        assert_eq!(firebase_doc.boolean_test, true);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pod_to_document() -> Result<()> {
+        let t = DemoPod {
+            integer_test: 12,
+            boolean_test: true,
+            string_test: "abc".to_owned(),
+        };
+        let firebase_doc = pod_to_document(&t)?;
+        let map = firebase_doc.fields;
+        assert_eq!(
+            map.unwrap()
+                .get("integer_test")
+                .expect("a value in the map for integer_test")
+                .integer_value
+                .as_ref()
+                .expect("an integer value"),
+            "12"
+        );
+
+        Ok(())
+    }
 }

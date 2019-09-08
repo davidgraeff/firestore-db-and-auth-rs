@@ -22,8 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for example handle proxies or certain ssl situations.
   Successive document calls are way faster now.
 - Rename "bearer" to "access_token". Added "access_token_unchecked()" to the auth trait.
-- documents::Write: Add options argument. The only option right now is "merge": Only update
+- documents::write: Add options argument. The only option right now is "merge": Only update
   given fields and not replace the entire document.
+- documents::query: Return an iterator and lazy fetch documents.
+  Take a serde_json::Value as value parameter. This allows to query for numbers and other
+  fields with other data types than string as well.
 
 ### Removed
 - Dependency on regex. A custom method is in place instead. 
