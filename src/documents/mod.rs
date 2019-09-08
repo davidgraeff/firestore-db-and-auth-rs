@@ -12,15 +12,19 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 mod list;
+
 pub use list::*;
 
 mod write;
+
 pub use write::*;
 
 mod query;
+
 pub use query::*;
 
 mod read;
+
 pub use read::*;
 
 /// An [`Iterator`] implementation that provides a join method
@@ -71,8 +75,26 @@ fn firebase_url(v1: &str, v2: &str) -> String {
     format!("https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/{}?", v1, v2)
 }
 
+
+/// Converts an absolute path like "projects/{PROJECT_ID}/databases/(default)/documents/my_collection/document_id"
+/// into a relative document path like "my_collection/document_id"
+///
+/// This is usually used to get a suitable path for [`delete`].
+pub fn abs_to_rel(path: &str) -> &str {
+    &path[path.find("(default)").unwrap() + 20..]
+}
+
+#[test]
+fn abs_to_rel_test() {
+    assert_eq!(abs_to_rel("projects/{PROJECT_ID}/databases/(default)/documents/my_collection/document_id"),
+               "my_collection/document_id");
+}
+
 ///
 /// Deletes the document at the given path.
+///
+/// You cannot use this directly with paths from [`list`] and [`query`] document metadata objects.
+/// Those contain an absolute document path. Use [`abs_to_rel`] to convert to a relative path.
 ///
 /// ## Arguments
 /// * 'auth' The authentication token
