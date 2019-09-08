@@ -5,6 +5,22 @@ use firestore_db_and_auth::*;
 
 const TEST_USER_ID: &str = include_str!("test_user_id.txt");
 
+#[derive(Debug, Serialize, Deserialize)]
+struct DemoDTO {
+    a_string: String,
+    an_int: u32,
+    a_timestamp: String,
+}
+
+/// Test if merge works. a_timestamp is not defined here,
+/// as well as an Option is used.
+#[derive(Debug, Serialize, Deserialize)]
+struct DemoDTOPartial {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    a_string: Option<String>,
+    an_int: u32,
+}
+
 #[test]
 fn service_account_session() -> errors::Result<()> {
     let cred = credentials::Credentials::from_file("firebase-service-account.json")
@@ -17,28 +33,40 @@ fn service_account_session() -> errors::Result<()> {
     // Check if cached value is used
     assert_eq!(session.access_token(), b);
 
+    println!("Write document");
+
     let obj = DemoDTO {
         a_string: "abcd".to_owned(),
         an_int: 14,
         a_timestamp: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
     };
 
-    println!("Write document");
-    documents::write(&mut session, "tests", Some("service_test"), &obj)?;
+    documents::write(&mut session, "tests", Some("service_test"), &obj, documents::WriteOptions::default())?;
 
+    println!("Read and compare document");
     let read: DemoDTO = documents::read(&mut session, "tests", "service_test")?;
 
     assert_eq!(read.a_string, "abcd");
     assert_eq!(read.an_int, 14);
 
-    Ok(())
-}
+    println!("Partial write document");
 
-#[derive(Debug, Serialize, Deserialize)]
-struct DemoDTO {
-    a_string: String,
-    an_int: u32,
-    a_timestamp: String,
+    let obj = DemoDTOPartial {
+        a_string: None,
+        an_int: 16,
+    };
+
+    documents::write(&mut session, "tests", Some("service_test"), &obj, documents::WriteOptions { merge: true })?;
+
+    println!("Read and compare document");
+    let read: DemoDTOPartial = documents::read(&mut session, "tests", "service_test")?;
+
+    // Should be updated
+    assert_eq!(read.an_int, 16);
+    // Should still exist, because of the merge
+    assert_eq!(read.a_string, Some("abcd".to_owned()));
+
+    Ok(())
 }
 
 #[test]
@@ -88,7 +116,7 @@ fn user_account_session() -> errors::Result<()> {
 
     // Test writing
     println!("user::Session documents::write");
-    let result = documents::write(&mut user_session, "tests", Some("test"), &obj)?;
+    let result = documents::write(&mut user_session, "tests", Some("test"), &obj, documents::WriteOptions::default())?;
     assert_eq!(result.document_id, "test");
     let duration = chrono::Utc::now().signed_duration_since(result.update_time.unwrap());
     assert!(

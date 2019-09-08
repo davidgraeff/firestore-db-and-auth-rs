@@ -11,23 +11,51 @@ use super::FirebaseAuthBearer;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// An [`Iterator`] implementation that provides a join method
+///
+/// [`Iterator`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html
+pub trait JoinableIterator: Iterator {
+    fn join(&mut self, sep: &str) -> String
+        where Self::Item: std::fmt::Display
+    {
+        use std::fmt::Write;
+        match self.next() {
+            None => String::new(),
+            Some(first_elt) => {
+                // estimate lower bound of capacity needed
+                let (lower, _) = self.size_hint();
+                let mut result = String::with_capacity(sep.len() * lower);
+                write!(&mut result, "{}", first_elt).unwrap();
+                for elt in self {
+                    result.push_str(sep);
+                    write!(&mut result, "{}", elt).unwrap();
+                }
+                result
+            }
+        }
+    }
+}
+
+impl<'a, VALUE> JoinableIterator for std::collections::hash_map::Keys<'a, String, VALUE> {}
+
+
 #[inline]
-fn firebase_url_query(v1:&str) -> String {
+fn firebase_url_query(v1: &str) -> String {
     format!("https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:runQuery", v1)
 }
 
 #[inline]
-fn firebase_url_base(v1:&str) -> String {
+fn firebase_url_base(v1: &str) -> String {
     format!("https://firestore.googleapis.com/v1/{}", v1)
 }
 
 #[inline]
-fn firebase_url_extended(v1:&str, v2:&str, v3:&str) -> String {
+fn firebase_url_extended(v1: &str, v2: &str, v3: &str) -> String {
     format!("https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/{}/{}", v1, v2, v3)
 }
 
 #[inline]
-fn firebase_url(v1:&str, v2:&str) -> String {
+fn firebase_url(v1: &str, v2: &str) -> String {
     format!("https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents/{}?", v1, v2)
 }
 
@@ -42,34 +70,99 @@ pub struct WriteResult {
     pub document_id: String,
 }
 
+/// Write options. The default will overwrite a target document and not merge fields.
+#[derive(Default)]
+pub struct WriteOptions {
+    /// If this is set instead of overwriting all fields of a target document, only the given fields will be merged.
+    /// This only works if your document type has Option fields.
+    /// The write will fail, if no document_id is given or the target document does not exist yet.
+    pub merge: bool
+}
+
 ///
 /// Write a document to a given collection.
+///
+/// If no document_id is given, Firestore will generate an ID. Check the [`WriteResult`] return value.
+///
+/// If a document_id is given, the document will be created if it does not yet exist.
+/// Except if the "merge" option (see [`WriteOptions::merge`]) is set.
+///
+/// Example:
+///```rust
+///use firestore_db_and_auth::{Credentials, ServiceSession, documents, errors::Result, FirebaseAuthBearer};
+///use serde::{Serialize,Deserialize};
+///
+/// #[derive(Serialize, Deserialize)]
+/// struct DemoDTO {
+///    a_string: String,
+///    an_int: u32,
+///    another_int: u32,
+/// }
+/// #[derive(Serialize, Deserialize)]
+/// struct DemoPartialDTO {
+///    #[serde(skip_serializing_if = "Option::is_none")]
+///    a_string: Option<String>,
+///    an_int: u32,
+/// }
+///
+/// fn write<'a>(session: &'a impl FirebaseAuthBearer<'a>) -> Result<()> {
+///    let obj = DemoDTO { a_string: "abcd".to_owned(), an_int: 14, another_int: 10 };
+///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions::default())?;
+///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
+///    Ok(())
+/// }
+/// /// Only write some fields and do not overwrite the entire document.
+/// /// Either via Option<> or by not having the fields in the structure, see DemoPartialDTO.
+/// fn write_partial<'a>(session: &'a impl FirebaseAuthBearer<'a>) -> Result<()> {
+///    let obj = DemoPartialDTO { a_string: None, an_int: 16 };
+///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions{merge:true})?;
+///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
+///    Ok(())
+/// }
+///
+/// # fn main() -> Result<()> {
+/// #   let cred = Credentials::from_file("firebase-service-account.json")?;
+/// #   let session = ServiceSession::new(cred)?;
+/// #   write(&session)?;
+/// #   write_partial(&session)?;
+/// #
+/// #   Ok(())
+/// # }
+///```
+
 ///
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'path' The document path / collection; For example "my_collection" or "a/nested/collection"
-/// * 'document_id' The document id. Make sure that you do not include the document id to the path argument.
+/// * 'document_id' The document id. Make sure that you do not include the document id in the path argument.
 /// * 'document' The document
+/// * 'options' Write options
 pub fn write<'a, T, BEARER>(
     auth: &'a BEARER,
     path: &str,
     document_id: Option<impl AsRef<str>>,
     document: &T,
+    options: WriteOptions,
 ) -> Result<WriteResult>
-where
-    T: Serialize,
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    where
+        T: Serialize,
+        BEARER: FirebaseAuthBearer<'a>,
 {
-    let url = match document_id.as_ref() {
+    let mut url = match document_id.as_ref() {
         Some(document_id) => firebase_url_extended(
             auth.project_id(),
             path,
-            document_id.as_ref()
+            document_id.as_ref(),
         ),
         None => firebase_url(auth.project_id(), path),
     };
 
     let firebase_document = pod_to_document(&document)?;
+
+    if options.merge && firebase_document.fields.is_some() {
+        let fields = firebase_document.fields.as_ref().unwrap().keys().join(",");
+        url = format!("{}?currentDocument.exists=true&updateMask.fieldPaths={}", url, fields);
+    }
 
     let builder = if document_id.is_some() {
         auth.client().patch(&url)
@@ -82,7 +175,7 @@ where
         .json(&firebase_document)
         .send()?;
 
-    extract_google_api_error(&mut resp, || document_id.as_ref().and_then(|f|Some(f.as_ref().to_owned())).or(Some(String::new())).unwrap())?;
+    extract_google_api_error(&mut resp, || document_id.as_ref().and_then(|f| Some(f.as_ref().to_owned())).or(Some(String::new())).unwrap())?;
 
     let result_document: dto::Document = resp.json()?;
     let doc_path = result_document.name.ok_or_else(|| {
@@ -132,9 +225,9 @@ where
 /// * 'auth' The authentication token
 /// * 'document_name' The document path / collection and document id; For example "projects/my_project/databases/(default)/documents/tests/test"
 pub fn read_by_name<'a, T, BEARER>(auth: &'a BEARER, document_name: impl AsRef<str>) -> Result<T>
-where
-    for<'b> T: Deserialize<'b>,
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    where
+            for<'b> T: Deserialize<'b>,
+            BEARER: FirebaseAuthBearer<'a>,
 {
     let url = firebase_url_base(document_name.as_ref());
 
@@ -157,9 +250,9 @@ where
 /// * 'path' The document path / collection; For example "my_collection" or "a/nested/collection"
 /// * 'document_id' The document id. Make sure that you do not include the document id to the path argument.
 pub fn read<'a, T, BEARER>(auth: &'a BEARER, path: &str, document_id: impl AsRef<str>) -> Result<T>
-where
-    for<'b> T: Deserialize<'b>,
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    where
+            for<'b> T: Deserialize<'b>,
+            for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let document_name = format!(
         "projects/{}/databases/(default)/documents/{}/{}",
@@ -196,7 +289,7 @@ pub struct List<'a, T, BEARER> {
 /// #[derive(Debug, Serialize, Deserialize)]
 /// struct DemoDTO { a_string: String, an_int: u32, }
 ///
-/// use firestore_db_and_auth::{documents};
+/// use firestore_db_and_auth::documents;
 /// # use firestore_db_and_auth::{credentials::Credentials, ServiceSession, errors::Result};
 ///
 /// # let credentials = Credentials::new(include_str!("../firebase-service-account.json"),
@@ -221,8 +314,8 @@ pub fn list<'a, T, BEARER>(
     auth: &'a BEARER,
     collection_id: impl Into<String>,
 ) -> List<'a, T, BEARER>
-where
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    where
+            for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let collection_id = collection_id.into();
     List {
@@ -254,9 +347,9 @@ fn get_new_data<'a>(
 }
 
 impl<'a, T, BEARER> Iterator for List<'a, T, BEARER>
-where
-    for<'b> T: Deserialize<'b>,
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    where
+            for<'b> T: Deserialize<'b>,
+            for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     type Item = Result<(T, dto::Document)>;
 
@@ -330,9 +423,9 @@ pub fn query<'a, T, BEARER>(
     operator: dto::FieldOperator,
     field: &str,
 ) -> Result<Vec<T>>
-where
-    for<'b> T: Deserialize<'b>,
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    where
+            for<'b> T: Deserialize<'b>,
+            for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let url = firebase_url_query(auth.project_id());
 
@@ -398,8 +491,8 @@ where
 /// * 'path' The relative collection path and document id, for example "my_collection/document_id"
 /// * 'fail_if_not_existing' If true this method will return an error if the document does not exist.
 pub fn delete<'a, BEARER>(auth: &'a BEARER, path: &str, fail_if_not_existing: bool) -> Result<()>
-where
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    where
+            for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let url = firebase_url(auth.project_id(), path);
 

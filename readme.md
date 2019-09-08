@@ -39,32 +39,41 @@ This crate operates on DTOs (Data transfer objects) for type-safe operations on 
 
 ```rust
 use firestore_db_and_auth::{Credentials, ServiceSession, documents, errors::Result};
+use serde::{Serialize,Deserialize};
 
-/// A document structure for demonstration purposes
-#[derive(Debug, Serialize, Deserialize)]
-struct DemoDTO {
+ #[derive(Serialize, Deserialize)]
+ struct DemoDTO {
     a_string: String,
     an_int: u32,
+    another_int: u32,
+ }
+ #[derive(Serialize, Deserialize)]
+ struct DemoPartialDTO {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    a_string: Option<String>,
+    an_int: u32,
+ }
+
+/// Write the given object with the document id "service_test" to the "tests" collection.
+/// You do not need to provide a document id (use "None" instead) and let Firestore generate one for you.
+/// 
+/// In either way a document is created or updated (overwritten).
+/// 
+/// The write method will return document metadata (including a possible generated document id)
+fn write(session: &ServiceSession) -> Result<()> {
+    let obj = DemoDTO { a_string: "abcd".to_owned(), an_int: 14, another_int: 10 };
+    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions::default())?;
+    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
+    Ok(())
 }
 
-let obj = DemoDTO {
-    a_string: "abcd".to_owned(),
-    an_int: 14,
-};
-
-fn main() -> Result<()> {
-    let cred = Credentials::from_file("firebase-service-account.json")?;
-    let session = ServiceSession::new(&cred)?;
-        
-    /// Write the given object with the document id "service_test" to the "tests" collection.
-    /// You do not need to provide a document id (use "None" instead) and let Firestore generate one for you.
-    /// 
-    /// In either way a document is created or updated (overwritten).
-    /// 
-    /// The method will return document metadata (including a possible generated document id)
-    let result = documents::write(&session, "tests", Some("service_test"), &obj)?;
-
-    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time, result.updated_time);
+/// Only write some fields and do not overwrite the entire document.
+/// Either via Option<> or by not having the fields in the structure, see DemoPartialDTO.
+fn write_partial(session: &ServiceSession) -> Result<()> {
+    let obj = DemoPartialDTO { a_string: None, an_int: 16 };
+    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions{merge:true})?;
+    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
+    Ok(())
 }
 ```
 

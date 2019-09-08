@@ -8,8 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4] - 2019-09-05
 
-This release is about refining the API. 
-
 ### Added
 - The user-session now also refreshes expired access tokens (if a refresh token is known).
 - Added "access_token_unchecked()" to the auth trait as a way to access the token without
@@ -24,6 +22,8 @@ This release is about refining the API.
   for example handle proxies or certain ssl situations.
   Successive document calls are way faster now.
 - Rename "bearer" to "access_token". Added "access_token_unchecked()" to the auth trait.
+- documents::Write: Add options argument. The only option right now is "merge": Only update
+  given fields and not replace the entire document.
 
 ### Removed
 - Dependency on regex. A custom method is in place instead. 
