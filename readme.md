@@ -24,9 +24,9 @@ Limitations:
 
 ### Cargo features
 
-* `rustls-tls`: Use rustls instead of native-tls (openssl on Linux).
-  If you want to compile this crate for musl, this is what you want.
-  Don't forget to disable the default features with `--no-default-features`.
+* rustls-tls: Use rustls instead of native-tls (openssl on Linux).
+  If you want to compile this crate with [MUSL](https://doc.rust-lang.org/edition-guide/rust-2018/platform-and-target-support/musl-support-for-fully-static-binaries.html),
+  this is what you want. Don't forget to disable the default features with --no-default-features.
 
 * `rocket_support`: [Rocket](https://rocket.rs/) is a web framework.
   This features enables rocket integration and adds a [Request Guard](https://rocket.rs/v0.4/guide/requests/#request-guards).
