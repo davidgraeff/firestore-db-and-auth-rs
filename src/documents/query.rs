@@ -19,10 +19,10 @@ use std::vec::IntoIter;
 ///
 /// let values: documents::Query = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id")?;
 /// for metadata in values {
-///     println!("id: {}, created: {}, updated: {}", metadata.name.as_ref().unwrap(), metadata.create_time.as_ref().unwrap(), metadata.update_time.as_ref().unwrap());
+///     println!("id: {}, created: {}, updated: {}", &metadata.name, metadata.create_time.as_ref().unwrap(), metadata.update_time.as_ref().unwrap());
 ///     // Fetch the actual document
 ///     // The data is wrapped in a Result<> because fetching new data could have failed
-///     let doc : DemoDTO = documents::read_by_name(&session, metadata.name.as_ref().unwrap())?;
+///     let doc : DemoDTO = documents::read_by_name(&session, &metadata.name)?;
 ///     println!("{:?}", doc);
 /// }
 /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
@@ -40,8 +40,7 @@ pub fn query(
     value: serde_json::Value,
     operator: dto::FieldOperator,
     field: &str,
-) -> Result<Query>
-{
+) -> Result<Query> {
     let url = firebase_url_query(auth.project_id());
     let value = crate::firebase_rest_to_rust::serde_value_to_firebase_value(&value);
 

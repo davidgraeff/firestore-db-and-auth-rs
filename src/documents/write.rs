@@ -46,7 +46,7 @@ pub struct WriteOptions {
 ///    an_int: u32,
 /// }
 ///
-/// fn write<'a>(session: &'a impl FirebaseAuthBearer<'a>) -> Result<()> {
+/// fn write(session: &impl FirebaseAuthBearer) -> Result<()> {
 ///    let obj = DemoDTO { a_string: "abcd".to_owned(), an_int: 14, another_int: 10 };
 ///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions::default())?;
 ///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
@@ -54,7 +54,7 @@ pub struct WriteOptions {
 /// }
 /// /// Only write some fields and do not overwrite the entire document.
 /// /// Either via Option<> or by not having the fields in the structure, see DemoPartialDTO.
-/// fn write_partial<'a>(session: &'a impl FirebaseAuthBearer<'a>) -> Result<()> {
+/// fn write_partial(session: &impl FirebaseAuthBearer) -> Result<()> {
 ///    let obj = DemoPartialDTO { a_string: None, an_int: 16 };
 ///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions{merge:true})?;
 ///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
@@ -85,8 +85,8 @@ pub fn write<T>(
     document: &T,
     options: WriteOptions,
 ) -> Result<WriteResult>
-    where
-        T: Serialize,
+where
+    T: Serialize,
 {
     let mut url = match document_id.as_ref() {
         Some(document_id) => firebase_url_extended(auth.project_id(), path, document_id.as_ref()),

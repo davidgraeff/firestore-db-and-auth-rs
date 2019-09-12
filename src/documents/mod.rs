@@ -110,8 +110,7 @@ fn abs_to_rel_test() {
 /// * 'auth' The authentication token
 /// * 'path' The relative collection path and document id, for example "my_collection/document_id"
 /// * 'fail_if_not_existing' If true this method will return an error if the document does not exist.
-pub fn delete(auth: &impl FirebaseAuthBearer, path: &str, fail_if_not_existing: bool) -> Result<()>
-{
+pub fn delete(auth: &impl FirebaseAuthBearer, path: &str, fail_if_not_existing: bool) -> Result<()> {
     let url = firebase_url(auth.project_id(), path);
 
     let query_request = dto::Write {
