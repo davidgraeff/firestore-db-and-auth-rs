@@ -34,15 +34,13 @@ use std::vec::IntoIter;
 /// * 'value' The query / filter value. For example "car".
 /// * 'operator' The query operator. For example "EQUAL".
 /// * 'field' The query / filter field. For example "type".
-pub fn query<'a, BEARER>(
-    auth: &'a BEARER,
+pub fn query(
+    auth: &impl FirebaseAuthBearer,
     collection_id: &str,
     value: serde_json::Value,
     operator: dto::FieldOperator,
     field: &str,
 ) -> Result<Query>
-where
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let url = firebase_url_query(auth.project_id());
     let value = crate::firebase_rest_to_rust::serde_value_to_firebase_value(&value);

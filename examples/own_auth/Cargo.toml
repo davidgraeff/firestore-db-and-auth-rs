@@ -1,0 +1,13 @@
+[package]
+name = "own_auth"
+publish = false
+version = "0.0.0"
+authors = ["David Gräff <david.graeff@web.de>"]
+edition = "2018"
+license = "MIT"
+readme = "readme.md"
+
+[dependencies]
+firestore-db-and-auth = { path = "../../", version = "^0", features=["rustls-tls"], default-features=false }
+reqwest = { version ="^0.9", default-features = false, features=["rustls-tls"] }
+serde = "^1.0"

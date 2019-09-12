@@ -78,16 +78,15 @@ pub struct WriteOptions {
 /// * 'document_id' The document id. Make sure that you do not include the document id in the path argument.
 /// * 'document' The document
 /// * 'options' Write options
-pub fn write<'a, T, BEARER>(
-    auth: &'a BEARER,
+pub fn write<T>(
+    auth: &impl FirebaseAuthBearer,
     path: &str,
     document_id: Option<impl AsRef<str>>,
     document: &T,
     options: WriteOptions,
 ) -> Result<WriteResult>
-where
-    T: Serialize,
-    BEARER: FirebaseAuthBearer<'a>,
+    where
+        T: Serialize,
 {
     let mut url = match document_id.as_ref() {
         Some(document_id) => firebase_url_extended(auth.project_id(), path, document_id.as_ref()),
@@ -121,10 +120,7 @@ where
     })?;
 
     let result_document: dto::Document = resp.json()?;
-    let doc_path = result_document
-        .name
-        .ok_or_else(|| FirebaseError::Generic("Resulting document does not contain a 'name' field"))?;
-    let document_id = Path::new(&doc_path)
+    let document_id = Path::new(&result_document.name)
         .file_name()
         .ok_or_else(|| FirebaseError::Generic("Resulting documents 'name' field is not a valid path"))?
         .to_str()

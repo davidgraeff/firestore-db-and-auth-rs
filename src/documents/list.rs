@@ -32,9 +32,9 @@ use super::*;
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'collection_id' The document path / collection; For example "my_collection" or "a/nested/collection"
-pub fn list<'a, T, BEARER>(auth: &'a BEARER, collection_id: impl Into<String>) -> List<'a, T, BEARER>
+pub fn list<T, BEARER>(auth: &BEARER, collection_id: impl Into<String>) -> List<T, BEARER>
 where
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    BEARER: FirebaseAuthBearer,
 {
     let collection_id = collection_id.into();
     List {
@@ -49,10 +49,11 @@ where
     }
 }
 
+#[inline]
 fn get_new_data<'a>(
     collection_id: &str,
     url: &str,
-    auth: &'a dyn FirebaseAuthBearer<'a>,
+    auth: &'a impl FirebaseAuthBearer,
 ) -> Result<dto::ListDocumentsResponse> {
     let mut resp = auth
         .client()
@@ -85,7 +86,7 @@ pub struct List<'a, T, BEARER> {
 impl<'a, T, BEARER> Iterator for List<'a, T, BEARER>
 where
     for<'b> T: Deserialize<'b>,
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
+    BEARER: FirebaseAuthBearer,
 {
     type Item = Result<(T, dto::Document)>;
 

@@ -85,8 +85,7 @@ pub struct Document {
     #[serde(rename = "createTime")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
+    pub name: String,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]

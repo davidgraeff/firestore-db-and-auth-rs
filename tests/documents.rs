@@ -26,7 +26,7 @@ fn service_account_session() -> errors::Result<()> {
     let cred = credentials::Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
     cred.verify()?;
 
-    let mut session = sessions::service_account::Session::new(cred).unwrap();
+    let mut session = ServiceSession::new(cred).unwrap();
     let b = session.access_token().to_owned();
 
     // Check if cached value is used
@@ -157,7 +157,7 @@ fn user_account_session() -> errors::Result<()> {
     )?
     .collect();
     assert_eq!(results.len(), 1);
-    let doc: DemoDTO = documents::read_by_name(&user_session, results.get(0).unwrap().name.as_ref().unwrap())?;
+    let doc: DemoDTO = documents::read_by_name(&user_session, &results.get(0).unwrap().name)?;
     assert_eq!(doc.a_string, "abc");
 
     let mut count = 0;

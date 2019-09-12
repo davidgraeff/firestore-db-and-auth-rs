@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5] - 2019-09-12
+
+### Changed
+
+- Remove lifetime from FirebaseAuthBearer trait. Turns out this can be elided by modern Rust versions.
+- Add two examples: own_auth and rocket_http_protected_route
+
 ## [0.4] - 2019-09-05
 
 ### Added

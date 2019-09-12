@@ -50,15 +50,15 @@ pub mod user {
         pub client: reqwest::Client,
     }
 
-    impl<'a> super::FirebaseAuthBearer<'a> for Session {
-        fn project_id(&'a self) -> &'a str {
+    impl super::FirebaseAuthBearer for Session {
+        fn project_id(&self) -> &str {
             &self.project_id_
         }
         /// Returns the current access token.
         /// This method will automatically refresh your access token, if it has expired.
         ///
         /// If the refresh failed, this will
-        fn access_token(&'a self) -> String {
+        fn access_token(&self) -> String {
             let jwt = self.access_token_.borrow();
             let jwt = jwt.as_str();
 
@@ -75,11 +75,11 @@ pub mod user {
             jwt.to_owned()
         }
 
-        fn access_token_unchecked(&'a self) -> String {
+        fn access_token_unchecked(&self) -> String {
             self.access_token_.borrow().clone()
         }
 
-        fn client(&'a self) -> &'a Client {
+        fn client(&self) -> &Client {
             &self.client
         }
     }
@@ -281,13 +281,13 @@ pub mod service_account {
         access_token_: RefCell<String>,
     }
 
-    impl<'a> super::FirebaseAuthBearer<'a> for Session {
-        fn project_id(&'a self) -> &'a str {
+    impl super::FirebaseAuthBearer for Session {
+        fn project_id(&self) -> &str {
             &self.credentials.project_id
         }
         /// Return the encoded jwt to be used as bearer token. If the jwt
         /// issue_at is older than 50 minutes, it will be updated to the current time.
-        fn access_token(&'a self) -> String {
+        fn access_token(&self) -> String {
             let mut jwt = self.jwt.borrow_mut();
 
             if jwt_update_expiry_if(&mut jwt, 50) {
@@ -303,11 +303,11 @@ pub mod service_account {
             self.access_token_.borrow().clone()
         }
 
-        fn access_token_unchecked(&'a self) -> String {
+        fn access_token_unchecked(&self) -> String {
             self.access_token_.borrow().clone()
         }
 
-        fn client(&'a self) -> &'a Client {
+        fn client(&self) -> &Client {
             &self.client
         }
     }

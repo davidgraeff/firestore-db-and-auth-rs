@@ -136,7 +136,7 @@ where
 
     let v = serde_json::to_value(r)?;
     let r: T = serde_json::from_value(v).map_err(|e| FirebaseError::Ser {
-        doc: document.name.to_owned(),
+        doc: Some(document.name.clone()),
         ser: e,
     })?;
     Ok(r)

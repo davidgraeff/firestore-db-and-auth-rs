@@ -6,10 +6,9 @@ use super::*;
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'document_name' The document path / collection and document id; For example "projects/my_project/databases/(default)/documents/tests/test"
-pub fn read_by_name<'a, T, BEARER>(auth: &'a BEARER, document_name: impl AsRef<str>) -> Result<T>
+pub fn read_by_name<T>(auth: &impl FirebaseAuthBearer, document_name: impl AsRef<str>) -> Result<T>
 where
     for<'b> T: Deserialize<'b>,
-    BEARER: FirebaseAuthBearer<'a>,
 {
     let url = firebase_url_base(document_name.as_ref());
 
@@ -32,10 +31,9 @@ where
 /// * 'auth' The authentication token
 /// * 'path' The document path / collection; For example "my_collection" or "a/nested/collection"
 /// * 'document_id' The document id. Make sure that you do not include the document id to the path argument.
-pub fn read<'a, T, BEARER>(auth: &'a BEARER, path: &str, document_id: impl AsRef<str>) -> Result<T>
+pub fn read<T>(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsRef<str>) -> Result<T>
 where
     for<'b> T: Deserialize<'b>,
-    for<'c> BEARER: FirebaseAuthBearer<'c>,
 {
     let document_name = format!(
         "projects/{}/databases/(default)/documents/{}/{}",
