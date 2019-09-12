@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove lifetime from FirebaseAuthBearer trait. Turns out this can be elided by modern Rust versions.
 - Add two examples: own_auth and rocket_http_protected_route
+- dto::Document: "name" is no longer wrapped in an option. This field is always set, if no error occurred.
 
 ## [0.4] - 2019-09-05
 
