@@ -247,8 +247,7 @@ pub mod user {
         }
 
         pub fn by_access_token(credentials: &Credentials, firebase_tokenid: &str) -> Result<Session, FirebaseError> {
-            let result = verify_access_token(&credentials, firebase_tokenid)?
-                .ok_or(FirebaseError::Generic("Validation failed"))?;
+            let result = verify_access_token(&credentials, firebase_tokenid)?;
             Ok(Session {
                 user_id: result.subject,
                 project_id_: result.audience,

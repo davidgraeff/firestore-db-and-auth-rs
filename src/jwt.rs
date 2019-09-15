@@ -173,28 +173,14 @@ impl TokenValidationResult {
 pub(crate) fn verify_access_token(
     credentials: &Credentials,
     access_token: &str,
-) -> Result<Option<TokenValidationResult>, Error> {
+) -> Result<TokenValidationResult, Error> {
     let token = AuthClaimsJWT::new_encoded(&access_token);
 
     let header = token.unverified_header()?;
-    let kid = header.registered.key_id.as_ref();
-    if kid.is_none() {
-        return Ok(None);
-    }
-    let kid = kid.unwrap();
+    let kid = header.registered.key_id.as_ref().ok_or(FirebaseError::Generic("No jwt kid"))?;
+    let secret = credentials.decode_secret(kid).ok_or(FirebaseError::Generic("No secret for kid"))?;
 
-    let secret = credentials.decode_secret(kid);
-    if secret.is_none() {
-        return Ok(None);
-    }
-    let secret = secret.unwrap();
-
-    let token = token.into_decoded(&secret.deref(), SignatureAlgorithm::RS256);
-    if token.is_err() {
-        return Ok(None);
-    }
-
-    let token = token.unwrap();
+    let token = token.into_decoded(&secret.deref(), SignatureAlgorithm::RS256)?;
 
     use biscuit::Presence::*;
 
@@ -220,9 +206,9 @@ pub(crate) fn verify_access_token(
         SingleOrMultiple::Multiple(v) => v.get(0).unwrap().to_string(),
     };
 
-    Ok(Some(TokenValidationResult {
+    Ok(TokenValidationResult {
         claims: claims.private.clone(),
         subject: claims.registered.subject.as_ref().unwrap().to_string(),
         audience,
-    }))
+    })
 }

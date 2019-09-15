@@ -129,9 +129,7 @@ impl Credentials {
             None,
             JWT_AUDIENCE_IDENTITY,
         )?;
-        verify_access_token(&self, &access_token)?.ok_or(Error::Generic(
-            "Verification failed. Credentials do not match the public keys",
-        ))?;
+        verify_access_token(&self, &access_token)?;
         Ok(())
     }
 
