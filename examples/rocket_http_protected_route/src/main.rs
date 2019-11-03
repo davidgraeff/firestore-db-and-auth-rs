@@ -5,7 +5,15 @@ use rocket::{get, routes};
 
 fn main() {
     let credentials = Credentials::from_file("firebase-service-account.json").unwrap();
-    rocket::ignite().manage(credentials).mount("/", routes![hello, hello_not_logged_in]).launch();
+    
+    let config = Config::build(Environment::Staging)
+        .port(8000)
+        .finalize()?;
+
+    rocket::custom(config)
+        .manage(credentials)
+        .mount("/", routes![hello, hello_not_logged_in])
+        .launch();
 }
 
 /// Example route. Try with /hello?auth=THE_TOKEN. This works because the auth guard
