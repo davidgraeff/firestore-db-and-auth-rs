@@ -8,8 +8,8 @@ fn main() {
     rocket::ignite().manage(credentials).mount("/", routes![hello, hello_not_logged_in]).launch();
 }
 
-/// And an example route could be:
-/// Try with /hello?auth=THE_TOKEN
+/// Example route. Try with /hello?auth=THE_TOKEN. This works because the auth guard
+/// either accepts an "Authorization: Bearer THE_TOKEN" http header or an url parameter "auth".
 #[get("/hello")]
 fn hello<'r>(auth: FirestoreAuthSessionGuard) -> String {
     // ApiKey is a single value tuple with a sessions::user::Session object inside
