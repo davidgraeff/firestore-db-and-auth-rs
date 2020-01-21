@@ -48,7 +48,7 @@ pub struct JWKSetDTO {
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
 pub fn download_google_jwks(account_mail: &str) -> Result<JWKSetDTO, Error> {
-    let mut resp = reqwest::Client::new()
+    let resp = reqwest::blocking::Client::new()
         .get(&format!(
             "https://www.googleapis.com/service_accounts/v1/jwk/{}",
             account_mail

@@ -4,7 +4,7 @@
 //! Please check the root page of this documentation for examples.
 
 use super::dto;
-use super::errors::{extract_google_api_error, FirebaseError, Result};
+use super::errors::{extract_google_api_response, FirebaseError, Result};
 use super::firebase_rest_to_rust::{document_to_pod, pod_to_document};
 use super::FirebaseAuthBearer;
 
@@ -32,8 +32,8 @@ pub use read::*;
 /// [`Iterator`]: https://doc.rust-lang.org/std/iter/trait.Iterator.html
 pub trait JoinableIterator: Iterator {
     fn join(&mut self, sep: &str) -> String
-    where
-        Self::Item: std::fmt::Display,
+        where
+            Self::Item: std::fmt::Display,
     {
         use std::fmt::Write;
         match self.next() {
@@ -124,14 +124,13 @@ pub fn delete(auth: &impl FirebaseAuthBearer, path: &str, fail_if_not_existing: 
         ..Default::default()
     };
 
-    let mut resp = auth
+    let resp = auth
         .client()
         .delete(&url)
         .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
         .send()?;
 
-    extract_google_api_error(&mut resp, || path.to_owned())?;
-
-    Ok({})
+    extract_google_api_response(resp, || path.to_owned())
+        .map(|_resp: serde_json::value::Value| ())
 }

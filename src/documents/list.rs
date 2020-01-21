@@ -33,8 +33,8 @@ use super::*;
 /// * 'auth' The authentication token
 /// * 'collection_id' The document path / collection; For example "my_collection" or "a/nested/collection"
 pub fn list<T, BEARER>(auth: &BEARER, collection_id: impl Into<String>) -> List<T, BEARER>
-where
-    BEARER: FirebaseAuthBearer,
+    where
+        BEARER: FirebaseAuthBearer,
 {
     let collection_id = collection_id.into();
     List {
@@ -55,16 +55,13 @@ fn get_new_data<'a>(
     url: &str,
     auth: &'a impl FirebaseAuthBearer,
 ) -> Result<dto::ListDocumentsResponse> {
-    let mut resp = auth
+    let resp = auth
         .client()
         .get(url)
         .bearer_auth(auth.access_token().to_owned())
         .send()?;
 
-    extract_google_api_error(&mut resp, || collection_id.to_owned())?;
-
-    let json: dto::ListDocumentsResponse = resp.json()?;
-    Ok(json)
+    extract_google_api_response(resp, || collection_id.to_owned())
 }
 
 /// This type is returned as a result by [`list`].
@@ -84,9 +81,9 @@ pub struct List<'a, T, BEARER> {
 }
 
 impl<'a, T, BEARER> Iterator for List<'a, T, BEARER>
-where
-    for<'b> T: Deserialize<'b>,
-    BEARER: FirebaseAuthBearer,
+    where
+            for<'b> T: Deserialize<'b>,
+            BEARER: FirebaseAuthBearer,
 {
     type Item = Result<(T, dto::Document)>;
 

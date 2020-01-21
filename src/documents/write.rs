@@ -85,8 +85,8 @@ pub fn write<T>(
     document: &T,
     options: WriteOptions,
 ) -> Result<WriteResult>
-where
-    T: Serialize,
+    where
+        T: Serialize,
 {
     let mut url = match document_id.as_ref() {
         Some(document_id) => firebase_url_extended(auth.project_id(), path, document_id.as_ref()),
@@ -106,12 +106,12 @@ where
         auth.client().post(&url)
     };
 
-    let mut resp = builder
+    let resp = builder
         .bearer_auth(auth.access_token().to_owned())
         .json(&firebase_document)
         .send()?;
 
-    extract_google_api_error(&mut resp, || {
+    let result_document: dto::Document = extract_google_api_response(resp, || {
         document_id
             .as_ref()
             .and_then(|f| Some(f.as_ref().to_owned()))
@@ -119,7 +119,6 @@ where
             .unwrap()
     })?;
 
-    let result_document: dto::Document = resp.json()?;
     let document_id = Path::new(&result_document.name)
         .file_name()
         .ok_or_else(|| FirebaseError::Generic("Resulting documents 'name' field is not a valid path"))?

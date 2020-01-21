@@ -3,8 +3,9 @@
 use std::error;
 use std::fmt;
 
-use reqwest;
+use reqwest::{self, StatusCode};
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 
 /// A result type that uses [`FirebaseError`] as an error type
 pub type Result<T> = std::result::Result<T, FirebaseError>;
@@ -152,32 +153,39 @@ struct GoogleRESTApiErrorWrapper {
 /// Arguments:
 /// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case
 /// - context: A function that will be called in an error case that returns a context string
-pub(crate) fn extract_google_api_error(response: &mut reqwest::Response, context: impl Fn() -> String) -> Result<()> {
+
+pub(crate) fn extract_google_api_response<T: DeserializeOwned>(response: reqwest::blocking::Response, context: impl Fn() -> String) -> Result<T> {
     if response.status() == 200 {
-        // The boring case
-        return Ok(());
+        Ok(response.json::<T>().map_err(|_e| {
+            FirebaseError::UnexpectedResponse(
+                "",
+                StatusCode::OK,
+                "".to_string(),
+                context(),
+            )
+        })?)
+    } else {
+        Err(extract_google_api_error(response, context()))
     }
+}
 
-    let google_api_error_wrapper: std::result::Result<GoogleRESTApiErrorWrapper, _> =
-        serde_json::from_str(&response.text()?);
 
-    match google_api_error_wrapper {
-        Ok(google_api_error_wrapper) => {
-            if let Some(google_api_error) = google_api_error_wrapper.error {
-                return Err(FirebaseError::APIError(
-                    google_api_error.code,
-                    google_api_error.message.to_owned(),
-                    context(),
-                ));
-            }
+pub(crate) fn extract_google_api_error(response: reqwest::blocking::Response, context_string: String) -> FirebaseError {
+    let status = response.status();
+
+    match response.json::<GoogleRESTApiErrorWrapper>() {
+        Ok(GoogleRESTApiErrorWrapper { error: Some(google_api_error) }) => {
+            return FirebaseError::APIError(
+                google_api_error.code,
+                google_api_error.message.to_owned(),
+                context_string,
+            );
         }
-        Err(_) => {}
-    };
-
-    Err(FirebaseError::UnexpectedResponse(
-        "",
-        response.status(),
-        response.text()?,
-        context(),
-    ))
+        _ => FirebaseError::UnexpectedResponse(
+            "",
+            status,
+            "".to_string(),
+            context_string,
+        )
+    }
 }

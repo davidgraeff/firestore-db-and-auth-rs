@@ -3,7 +3,7 @@
 //! A session can be either for a service-account or impersonated via a firebase auth user id.
 
 use super::credentials;
-use super::errors::{extract_google_api_error, FirebaseError};
+use super::errors::{extract_google_api_response, FirebaseError};
 use super::jwt::{
     create_jwt, is_expired, jwt_update_expiry_if, verify_access_token, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
     JWT_AUDIENCE_IDENTITY,
@@ -11,7 +11,7 @@ use super::jwt::{
 use super::FirebaseAuthBearer;
 
 use chrono::Duration;
-use reqwest::Client;
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::ops::Deref;
@@ -47,7 +47,7 @@ pub mod user {
         access_token_: RefCell<String>,
         project_id_: String,
         /// The http client. Replace or modify the client if you have special demands like proxy support
-        pub client: reqwest::Client,
+        pub client: reqwest::blocking::Client,
     }
 
     impl super::FirebaseAuthBearer for Session {
@@ -92,7 +92,7 @@ pub mod user {
 
         let url = refresh_to_access_endpoint(api_key);
         let client = Client::new();
-        let ref mut response = client.post(&url).form(&request_body).send()?;
+        let response = client.post(&url).form(&request_body).send()?;
         Ok(response.json()?)
     }
 
@@ -195,7 +195,7 @@ pub mod user {
                 refresh_token: Some(r.refresh_token),
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
             })
         }
 
@@ -229,12 +229,12 @@ pub mod user {
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
-            let mut r = Client::new()
+            let r = Client::new()
                 .post(&token_endpoint(&credentials.api_key))
                 .json(&CustomJwtToFirebaseID::new(encoded, with_refresh_token))
                 .send()?;
-            extract_google_api_error(&mut r, || user_id.to_owned())?;
-            let r: CustomJwtToFirebaseIDResponse = r.json()?;
+
+            let r: CustomJwtToFirebaseIDResponse = extract_google_api_response(r, || user_id.to_owned())?;
 
             Ok(Session {
                 user_id: user_id.to_owned(),
@@ -242,7 +242,7 @@ pub mod user {
                 refresh_token: r.refreshToken,
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
             })
         }
 
@@ -254,7 +254,7 @@ pub mod user {
                 access_token_: RefCell::new(firebase_tokenid.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
             })
         }
     }
@@ -266,7 +266,7 @@ pub mod service_account {
     use credentials::Credentials;
 
     use chrono::Duration;
-    use reqwest::Client;
+    use reqwest::blocking::Client;
     use std::cell::RefCell;
     use std::ops::Deref;
 
@@ -275,7 +275,7 @@ pub mod service_account {
         /// The google credentials
         pub credentials: Credentials,
         /// The http client. Replace or modify the client if you have special demands like proxy support
-        pub client: reqwest::Client,
+        pub client: reqwest::blocking::Client,
         jwt: RefCell<AuthClaimsJWT>,
         access_token_: RefCell<String>,
     }
@@ -342,7 +342,7 @@ pub mod service_account {
                 access_token_: RefCell::new(encoded),
                 jwt: RefCell::new(jwt),
                 credentials,
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
             })
         }
     }

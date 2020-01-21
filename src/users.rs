@@ -2,7 +2,7 @@
 //!
 //! Retrieve firebase user information
 
-use super::errors::{extract_google_api_error, Result};
+use super::errors::{extract_google_api_response, Result};
 
 use super::sessions::{service_account, user};
 use serde::{Deserialize, Serialize};
@@ -69,7 +69,7 @@ fn firebase_auth_url(v: &str, v2: &str) -> String {
 pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
     let url = firebase_auth_url("lookup", &session.api_key);
 
-    let mut resp = session
+    let resp = session
         .client()
         .post(&url)
         .json(&UserRequest {
@@ -77,9 +77,7 @@ pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
         })
         .send()?;
 
-    extract_google_api_error(&mut resp, || session.user_id.to_owned())?;
-
-    Ok(resp.json()?)
+    extract_google_api_response(resp, || session.user_id.to_owned())
 }
 
 /// Removes the firebase auth user associated with the given user session
@@ -89,7 +87,7 @@ pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
 /// - USER_NOT_FOUND
 pub fn user_remove(session: &user::Session) -> Result<()> {
     let url = firebase_auth_url("delete", &session.api_key);
-    let mut resp = session
+    let resp = session
         .client()
         .post(&url)
         .json(&UserRequest {
@@ -97,8 +95,8 @@ pub fn user_remove(session: &user::Session) -> Result<()> {
         })
         .send()?;
 
-    extract_google_api_error(&mut resp, || session.user_id.to_owned())?;
-    Ok({})
+    extract_google_api_response(resp, || session.user_id.to_owned())
+        .map(|_resp: serde_json::value::Value| ())
 }
 
 #[allow(non_snake_case)]
@@ -119,7 +117,7 @@ struct SignInUpUserRequest {
 
 fn sign_up_in(session: &service_account::Session, email: &str, password: &str, action: &str) -> Result<user::Session> {
     let url = firebase_auth_url(action, &session.credentials.api_key);
-    let mut resp = session
+    let resp = session
         .client()
         .post(&url)
         .json(&SignInUpUserRequest {
@@ -129,9 +127,8 @@ fn sign_up_in(session: &service_account::Session, email: &str, password: &str, a
         })
         .send()?;
 
-    extract_google_api_error(&mut resp, || email.to_owned())?;
+    let resp: SignInUpUserResponse = extract_google_api_response(resp, || email.to_owned())?;
 
-    let resp: SignInUpUserResponse = resp.json()?;
 
     Ok(user::Session::new(
         &session.credentials,

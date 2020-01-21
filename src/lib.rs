@@ -36,5 +36,5 @@ pub trait FirebaseAuthBearer {
     fn access_token_unchecked(&self) -> String;
     /// The reqwest http client.
     /// The `Client` holds a connection pool internally, so it is advised that it is reused for multiple, successive connections.
-    fn client(&self) -> &reqwest::Client;
+    fn client(&self) -> &reqwest::blocking::Client;
 }

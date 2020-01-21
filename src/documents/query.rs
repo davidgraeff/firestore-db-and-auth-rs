@@ -66,18 +66,18 @@ pub fn query(
         ..Default::default()
     };
 
-    let mut resp = auth
+    let resp = auth
         .client()
         .post(&url)
         .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
         .send()?;
 
-    extract_google_api_error(&mut resp, || collection_id.to_owned())?;
 
-    let json: Option<Vec<dto::RunQueryResponse>> = resp.json()?;
-
-    Ok(Query(json.unwrap_or_default().into_iter()))
+    extract_google_api_response(resp, || collection_id.to_owned())
+        .map(|json: Option<Vec<dto::RunQueryResponse>>| {
+            Query(json.unwrap_or_default().into_iter())
+        })
 }
 
 /// This type is returned as a result by [`query`].
