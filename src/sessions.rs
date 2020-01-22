@@ -11,7 +11,6 @@ use super::jwt::{
 use super::FirebaseAuthBearer;
 
 use chrono::Duration;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::ops::Deref;
@@ -47,7 +46,9 @@ pub mod user {
         access_token_: RefCell<String>,
         project_id_: String,
         /// The http client. Replace or modify the client if you have special demands like proxy support
-        pub client: reqwest::Client,
+        pub client: reqwest::blocking::Client,
+        /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
+        pub client_async: reqwest::Client,
     }
 
     impl super::FirebaseAuthBearer for Session {
@@ -79,11 +80,17 @@ pub mod user {
             self.access_token_.borrow().clone()
         }
 
-        fn client(&self) -> &Client {
+        fn client(&self) -> &reqwest::blocking::Client {
             &self.client
+        }
+
+        fn client_async(&self) -> &reqwest::Client {
+            &self.client_async
         }
     }
 
+    /// Gets a new access token via an api_key and a refresh_token.
+    /// This is a blocking operation.
     fn get_new_access_token(
         api_key: &str,
         refresh_token: &str,
@@ -91,8 +98,8 @@ pub mod user {
         let request_body = vec![("grant_type", "refresh_token"), ("refresh_token", refresh_token)];
 
         let url = refresh_to_access_endpoint(api_key);
-        let client = Client::new();
-        let ref mut response = client.post(&url).form(&request_body).send()?;
+        let client = reqwest::blocking::Client::new();
+        let response = client.post(&url).form(&request_body).send()?;
         Ok(response.json()?)
     }
 
@@ -142,6 +149,8 @@ pub mod user {
         ///
         /// If none of the parameters are given, the function will error out.
         ///
+        /// Async support: This is a blocking operation.
+        ///
         /// See:
         /// * https://firebase.google.com/docs/reference/rest/auth#section-refresh-token
         /// * https://firebase.google.com/docs/auth/admin/create-custom-tokens#create_custom_tokens_using_a_third-party_jwt_library
@@ -187,6 +196,7 @@ pub mod user {
         /// - `credentials` The credentials
         /// - `refresh_token` A refresh token.
         ///
+        /// Async support: This is a blocking operation.
         pub fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session, FirebaseError> {
             let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token)?;
             Ok(Session {
@@ -195,7 +205,8 @@ pub mod user {
                 refresh_token: Some(r.refresh_token),
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
+                client_async: reqwest::Client::new(),
             })
         }
 
@@ -229,12 +240,12 @@ pub mod user {
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
-            let mut r = Client::new()
+            let resp = reqwest::blocking::Client::new()
                 .post(&token_endpoint(&credentials.api_key))
                 .json(&CustomJwtToFirebaseID::new(encoded, with_refresh_token))
                 .send()?;
-            extract_google_api_error(&mut r, || user_id.to_owned())?;
-            let r: CustomJwtToFirebaseIDResponse = r.json()?;
+            let resp = extract_google_api_error(resp, || user_id.to_owned())?;
+            let r: CustomJwtToFirebaseIDResponse = resp.json()?;
 
             Ok(Session {
                 user_id: user_id.to_owned(),
@@ -242,7 +253,8 @@ pub mod user {
                 refresh_token: r.refreshToken,
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
+                client_async: reqwest::Client::new(),
             })
         }
 
@@ -254,7 +266,8 @@ pub mod user {
                 access_token_: RefCell::new(firebase_tokenid.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
+                client_async: reqwest::Client::new(),
             })
         }
     }
@@ -266,7 +279,6 @@ pub mod service_account {
     use credentials::Credentials;
 
     use chrono::Duration;
-    use reqwest::Client;
     use std::cell::RefCell;
     use std::ops::Deref;
 
@@ -275,7 +287,9 @@ pub mod service_account {
         /// The google credentials
         pub credentials: Credentials,
         /// The http client. Replace or modify the client if you have special demands like proxy support
-        pub client: reqwest::Client,
+        pub client: reqwest::blocking::Client,
+        /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
+        pub client_async: reqwest::Client,
         jwt: RefCell<AuthClaimsJWT>,
         access_token_: RefCell<String>,
     }
@@ -306,8 +320,12 @@ pub mod service_account {
             self.access_token_.borrow().clone()
         }
 
-        fn client(&self) -> &Client {
+        fn client(&self) -> &reqwest::blocking::Client {
             &self.client
+        }
+
+        fn client_async(&self) -> &reqwest::Client {
+            &self.client_async
         }
     }
 
@@ -342,7 +360,8 @@ pub mod service_account {
                 access_token_: RefCell::new(encoded),
                 jwt: RefCell::new(jwt),
                 credentials,
-                client: reqwest::Client::new(),
+                client: reqwest::blocking::Client::new(),
+                client_async: reqwest::Client::new(),
             })
         }
     }

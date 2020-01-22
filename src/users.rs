@@ -69,7 +69,7 @@ fn firebase_auth_url(v: &str, v2: &str) -> String {
 pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
     let url = firebase_auth_url("lookup", &session.api_key);
 
-    let mut resp = session
+    let resp = session
         .client()
         .post(&url)
         .json(&UserRequest {
@@ -77,7 +77,7 @@ pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
         })
         .send()?;
 
-    extract_google_api_error(&mut resp, || session.user_id.to_owned())?;
+    let resp = extract_google_api_error(resp, || session.user_id.to_owned())?;
 
     Ok(resp.json()?)
 }
@@ -89,7 +89,7 @@ pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
 /// - USER_NOT_FOUND
 pub fn user_remove(session: &user::Session) -> Result<()> {
     let url = firebase_auth_url("delete", &session.api_key);
-    let mut resp = session
+    let resp = session
         .client()
         .post(&url)
         .json(&UserRequest {
@@ -97,7 +97,7 @@ pub fn user_remove(session: &user::Session) -> Result<()> {
         })
         .send()?;
 
-    extract_google_api_error(&mut resp, || session.user_id.to_owned())?;
+    extract_google_api_error(resp, || session.user_id.to_owned())?;
     Ok({})
 }
 
@@ -119,7 +119,7 @@ struct SignInUpUserRequest {
 
 fn sign_up_in(session: &service_account::Session, email: &str, password: &str, action: &str) -> Result<user::Session> {
     let url = firebase_auth_url(action, &session.credentials.api_key);
-    let mut resp = session
+    let resp = session
         .client()
         .post(&url)
         .json(&SignInUpUserRequest {
@@ -129,7 +129,7 @@ fn sign_up_in(session: &service_account::Session, email: &str, password: &str, a
         })
         .send()?;
 
-    extract_google_api_error(&mut resp, || email.to_owned())?;
+    let resp = extract_google_api_error(resp, || email.to_owned())?;
 
     let resp: SignInUpUserResponse = resp.json()?;
 

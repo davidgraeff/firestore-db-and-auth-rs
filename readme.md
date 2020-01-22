@@ -8,6 +8,7 @@
 [![](https://img.shields.io/badge/license-MIT-blue.svg)](http://opensource.org/licenses/MIT)
 
 This crate allows easy access to your Google Firestore DB via service account or OAuth impersonated Google Firebase Auth credentials.
+Minimum Rust version: 1.38
 
 Features:
 * Subset of the Firestore v1 API

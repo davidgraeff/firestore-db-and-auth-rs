@@ -4,6 +4,7 @@ use std::error;
 use std::fmt;
 
 use reqwest;
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
 /// A result type that uses [`FirebaseError`] as an error type
@@ -152,32 +153,55 @@ struct GoogleRESTApiErrorWrapper {
 /// Arguments:
 /// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case
 /// - context: A function that will be called in an error case that returns a context string
-pub(crate) fn extract_google_api_error(response: &mut reqwest::Response, context: impl Fn() -> String) -> Result<()> {
+pub(crate) fn extract_google_api_error(
+    response: reqwest::blocking::Response,
+    context: impl Fn() -> String,
+) -> Result<reqwest::blocking::Response> {
     if response.status() == 200 {
-        // The boring case
-        return Ok(());
+        return Ok(response);
     }
 
-    let google_api_error_wrapper: std::result::Result<GoogleRESTApiErrorWrapper, _> =
-        serde_json::from_str(&response.text()?);
+    Err(extract_google_api_error_intern(
+        response.status().clone(),
+        response.text()?,
+        context,
+    ))
+}
 
-    match google_api_error_wrapper {
-        Ok(google_api_error_wrapper) => {
-            if let Some(google_api_error) = google_api_error_wrapper.error {
-                return Err(FirebaseError::APIError(
-                    google_api_error.code,
-                    google_api_error.message.to_owned(),
-                    context(),
-                ));
-            }
+/// If the given reqwest response is status code 200, nothing happens
+/// Otherwise the response will be analysed if it contains a Google API Error response.
+/// See https://firebase.google.com/docs/reference/rest/auth#section-error-response
+///
+/// Arguments:
+/// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case
+/// - context: A function that will be called in an error case that returns a context string
+pub(crate) async fn extract_google_api_error_async(
+    response: reqwest::Response,
+    context: impl Fn() -> String,
+) -> Result<reqwest::Response> {
+    if response.status() == 200 {
+        return Ok(response);
+    }
+
+    Err(extract_google_api_error_intern(
+        response.status().clone(),
+        response.text().await?,
+        context,
+    ))
+}
+
+fn extract_google_api_error_intern(
+    status: StatusCode,
+    http_body: String,
+    context: impl Fn() -> String,
+) -> FirebaseError {
+    let google_api_error_wrapper: std::result::Result<GoogleRESTApiErrorWrapper, serde_json::Error> =
+        serde_json::from_str(&http_body);
+    if let Ok(google_api_error_wrapper) = google_api_error_wrapper {
+        if let Some(google_api_error) = google_api_error_wrapper.error {
+            return FirebaseError::APIError(google_api_error.code, google_api_error.message.to_owned(), context());
         }
-        Err(_) => {}
     };
 
-    Err(FirebaseError::UnexpectedResponse(
-        "",
-        response.status(),
-        response.text()?,
-        context(),
-    ))
+    FirebaseError::UnexpectedResponse("", status, http_body, context())
 }

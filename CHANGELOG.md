@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6] - 2020-01-22
+
+### Changed
+
+- Update dependencies
+- Support for reqwest 0.10 with async/await.
+- Delete operation also available as async variant (unstable API for now)
+
 ## [0.5] - 2019-09-12
 
 ### Changed

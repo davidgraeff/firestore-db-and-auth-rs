@@ -11,21 +11,17 @@ use super::FirebaseAuthBearer;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod delete;
 mod list;
-
-pub use list::*;
-
+mod query;
+mod read;
 mod write;
 
-pub use write::*;
-
-mod query;
-
+pub use delete::*;
+pub use list::*;
 pub use query::*;
-
-mod read;
-
 pub use read::*;
+pub use write::*;
 
 /// An [`Iterator`] implementation that provides a join method
 ///
@@ -98,40 +94,4 @@ fn abs_to_rel_test() {
         abs_to_rel("projects/{PROJECT_ID}/databases/(default)/documents/my_collection/document_id"),
         "my_collection/document_id"
     );
-}
-
-///
-/// Deletes the document at the given path.
-///
-/// You cannot use this directly with paths from [`list`] and [`query`] document metadata objects.
-/// Those contain an absolute document path. Use [`abs_to_rel`] to convert to a relative path.
-///
-/// ## Arguments
-/// * 'auth' The authentication token
-/// * 'path' The relative collection path and document id, for example "my_collection/document_id"
-/// * 'fail_if_not_existing' If true this method will return an error if the document does not exist.
-pub fn delete(auth: &impl FirebaseAuthBearer, path: &str, fail_if_not_existing: bool) -> Result<()> {
-    let url = firebase_url(auth.project_id(), path);
-
-    let query_request = dto::Write {
-        current_document: Some(dto::Precondition {
-            exists: match fail_if_not_existing {
-                true => Some(true),
-                false => None,
-            },
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
-
-    let mut resp = auth
-        .client()
-        .delete(&url)
-        .bearer_auth(auth.access_token().to_owned())
-        .json(&query_request)
-        .send()?;
-
-    extract_google_api_error(&mut resp, || path.to_owned())?;
-
-    Ok({})
 }

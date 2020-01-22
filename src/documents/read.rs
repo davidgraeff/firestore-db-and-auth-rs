@@ -12,13 +12,13 @@ where
 {
     let url = firebase_url_base(document_name.as_ref());
 
-    let mut resp = auth
+    let resp = auth
         .client()
         .get(&url)
         .bearer_auth(auth.access_token().to_owned())
         .send()?;
 
-    extract_google_api_error(&mut resp, || document_name.as_ref().to_owned())?;
+    let resp = extract_google_api_error(resp, || document_name.as_ref().to_owned())?;
 
     let json: dto::Document = resp.json()?;
     Ok(document_to_pod(&json)?)

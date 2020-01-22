@@ -106,12 +106,12 @@ where
         auth.client().post(&url)
     };
 
-    let mut resp = builder
+    let resp = builder
         .bearer_auth(auth.access_token().to_owned())
         .json(&firebase_document)
         .send()?;
 
-    extract_google_api_error(&mut resp, || {
+    let resp = extract_google_api_error(resp, || {
         document_id
             .as_ref()
             .and_then(|f| Some(f.as_ref().to_owned()))

@@ -48,13 +48,28 @@ pub struct JWKSetDTO {
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
 pub fn download_google_jwks(account_mail: &str) -> Result<JWKSetDTO, Error> {
-    let mut resp = reqwest::Client::new()
+    let resp = reqwest::blocking::Client::new()
         .get(&format!(
             "https://www.googleapis.com/service_accounts/v1/jwk/{}",
             account_mail
         ))
         .send()?;
     let jwk_set: JWKSetDTO = resp.json()?;
+    Ok(jwk_set)
+}
+
+/// Download the Google JWK Set for a given service account.
+/// The resulting set of JWKs need to be added to a credentials object
+/// for jwk verifications.
+pub async fn download_google_jwks_async(account_mail: &str) -> Result<JWKSetDTO, Error> {
+    let resp = reqwest::Client::new()
+        .get(&format!(
+            "https://www.googleapis.com/service_accounts/v1/jwk/{}",
+            account_mail
+        ))
+        .send()
+        .await?;
+    let jwk_set: JWKSetDTO = resp.json().await?;
     Ok(jwk_set)
 }
 
@@ -177,8 +192,14 @@ pub(crate) fn verify_access_token(
     let token = AuthClaimsJWT::new_encoded(&access_token);
 
     let header = token.unverified_header()?;
-    let kid = header.registered.key_id.as_ref().ok_or(FirebaseError::Generic("No jwt kid"))?;
-    let secret = credentials.decode_secret(kid).ok_or(FirebaseError::Generic("No secret for kid"))?;
+    let kid = header
+        .registered
+        .key_id
+        .as_ref()
+        .ok_or(FirebaseError::Generic("No jwt kid"))?;
+    let secret = credentials
+        .decode_secret(kid)
+        .ok_or(FirebaseError::Generic("No secret for kid"))?;
 
     let token = token.into_decoded(&secret.deref(), SignatureAlgorithm::RS256)?;
 

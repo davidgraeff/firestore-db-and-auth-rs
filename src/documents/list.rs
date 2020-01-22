@@ -55,13 +55,13 @@ fn get_new_data<'a>(
     url: &str,
     auth: &'a impl FirebaseAuthBearer,
 ) -> Result<dto::ListDocumentsResponse> {
-    let mut resp = auth
+    let resp = auth
         .client()
         .get(url)
         .bearer_auth(auth.access_token().to_owned())
         .send()?;
 
-    extract_google_api_error(&mut resp, || collection_id.to_owned())?;
+    let resp = extract_google_api_error(resp, || collection_id.to_owned())?;
 
     let json: dto::ListDocumentsResponse = resp.json()?;
     Ok(json)
