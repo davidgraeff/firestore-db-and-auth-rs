@@ -16,7 +16,7 @@ Features:
 * Support for the downloadable Google service account json file from [Google Clound console](https://console.cloud.google.com/apis/credentials/serviceaccountkey).
   (See https://cloud.google.com/storage/docs/reference/libraries#client-libraries-install-cpp)
 
-Usecases:
+Use-cases:
 * Strictly typed document read/write/query access
 * Cloud functions (Google Compute, AWS Lambda) access to Firestore
 
@@ -25,11 +25,10 @@ Limitations:
 
 ### Cargo features
 
-* rustls-tls: Use rustls instead of native-tls (openssl on Linux).
-  If you want to compile this crate with [MUSL](https://doc.rust-lang.org/edition-guide/rust-2018/platform-and-target-support/musl-support-for-fully-static-binaries.html),
-  this is what you want. Don't forget to disable the default features with --no-default-features.
+* **native-tls**, **default-tls**, **rustls-tls**: Choose the SSL library for encrypted connections (https).
+  rustls-tls is the default (uses the crate rustls). native-tls will use openssl on Linux/Mac.
 
-* `rocket_support`: [Rocket](https://rocket.rs/) is a web framework.
+* **rocket_support**: [Rocket](https://rocket.rs/) is a web framework.
   This features enables rocket integration and adds a [Request Guard](https://rocket.rs/v0.4/guide/requests/#request-guards).
   Only Firestore Auth authorized requests can pass this guard.
   This feature requires rust nightly, because Rocket itself requires nightly.
@@ -225,6 +224,9 @@ let c = Credentials::new(include_str!("firebase-service-account.json"),
                          &[include_str!("securetoken.jwks"), include_str!("service-account.jwks")])?;
 ```
 
+> Please note though, that Googles JWK keys change periodically.
+You probably want to redeploy your service with fresh public keys about every three weeks.
+
 ### More information
 
 * [Firestore Auth: Background information](doc/auth_background.md)
@@ -238,14 +240,7 @@ To perform a full integration test (`cargo test`), you need a valid "firebase-se
 The tests expect a Firebase user with the ID given in `tests/test_user_id.txt` to exist.
 [More Information](/doc/integration_tests.md)
 
-## Future development
-
-Maintenance status: In Development
-
-This library does not have the ambition to mirror the http/gRPC API 1:1.
-There are auto-generated libraries for this purpose.
-
-#### Async vs Sync
+## Async vs Sync
 
 This crate uses reqwest as http client.
 reqwest supports a blocking and an async/await API.
@@ -254,6 +249,9 @@ Right now only blocking APIs are provided, async/await variants are
 gated behind an "unstable" cargo feature.
 
 #### What can be done to make this crate more awesome
+
+This library does not have the ambition to mirror the http/gRPC API 1:1.
+There are auto-generated libraries for this purpose. But the following fits into the crates schema:
 
 * Data streaming via gRPC/Protobuf
 * Nice to have: Transactions, batch_get support for Firestore
