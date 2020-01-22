@@ -248,10 +248,10 @@ There are auto-generated libraries for this purpose.
 #### Async vs Sync
 
 This crate uses reqwest as http client.
-reqwest itself will soon have picked up full support for Rusts async+await features.
+reqwest supports a blocking and an async/await API.
 
-All that is left to do here then is to depend on Rust 1.39 and add an "async fn" variant that calls
-and awaits reqwest for each existing method.
+Right now only blocking APIs are provided, async/await variants are
+gated behind an "unstable" cargo feature.
 
 #### What can be done to make this crate more awesome
 
