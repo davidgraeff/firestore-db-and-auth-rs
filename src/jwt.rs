@@ -242,3 +242,54 @@ pub(crate) fn verify_access_token(
         audience,
     })
 }
+
+pub mod session_cookie {
+    use super::*;
+    use std::ops::Add;
+
+    pub(crate) fn create_jwt_encoded(credentials: &Credentials, duration: chrono::Duration) -> Result<String, Error> {
+        let scope = [
+            "https://www.googleapis.com/auth/cloud-platform",
+            "https://www.googleapis.com/auth/firebase.database",
+            "https://www.googleapis.com/auth/firebase.messaging",
+            "https://www.googleapis.com/auth/identitytoolkit",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ];
+
+        const AUDIENCE: &str = "https://accounts.google.com/o/oauth2/token";
+
+        use biscuit::{
+            jws::{Header, RegisteredHeader},
+            ClaimsSet, Empty, RegisteredClaims, JWT,
+        };
+
+        let header: Header<Empty> = Header::from(RegisteredHeader {
+            algorithm: SignatureAlgorithm::RS256,
+            key_id: Some(credentials.private_key_id.to_owned()),
+            ..Default::default()
+        });
+        let expected_claims = ClaimsSet::<JwtOAuthPrivateClaims> {
+            registered: RegisteredClaims {
+                issuer: Some(credentials.client_email.clone()),
+                audience: Some(SingleOrMultiple::Single(AUDIENCE.to_string())),
+                subject: Some(credentials.client_email.clone()),
+                expiry: Some(biscuit::Timestamp::from(Utc::now().add(duration))),
+                issued_at: Some(biscuit::Timestamp::from(Utc::now())),
+                ..Default::default()
+            },
+            private: JwtOAuthPrivateClaims {
+                scope: Some(scope.join(" ")),
+                client_id: None,
+                uid: None,
+            },
+        };
+        let jwt = JWT::new_decoded(header, expected_claims);
+
+        let secret = credentials
+            .keys
+            .secret
+            .as_ref()
+            .ok_or(Error::Generic("No private key added via add_keypair_key!"))?;
+        Ok(jwt.encode(&secret.deref())?.encoded()?.encode())
+    }
+}

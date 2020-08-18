@@ -58,7 +58,7 @@ pub mod user {
         /// Returns the current access token.
         /// This method will automatically refresh your access token, if it has expired.
         ///
-        /// If the refresh failed, this will
+        /// If the refresh failed, this will return an empty string.
         fn access_token(&self) -> String {
             let jwt = self.access_token_.borrow();
             let jwt = jwt.as_str();
@@ -258,18 +258,127 @@ pub mod user {
             })
         }
 
-        pub fn by_access_token(credentials: &Credentials, firebase_tokenid: &str) -> Result<Session, FirebaseError> {
-            let result = verify_access_token(&credentials, firebase_tokenid)?;
+        /// Create a new firestore user session by a valid access token
+        ///
+        /// Remember that such a session cannot renew itself. As soon as the access token expired,
+        /// no further operations can be issued by this session.
+        ///
+        /// No network operation is performed, the access token is only checked for its validity.
+        ///
+        /// Arguments:
+        /// - `credentials` The credentials
+        /// - `access_token` An access token, sometimes called a firebase id token.
+        ///
+        pub fn by_access_token(credentials: &Credentials, access_token: &str) -> Result<Session, FirebaseError> {
+            let result = verify_access_token(&credentials, access_token)?;
             Ok(Session {
                 user_id: result.subject,
                 project_id_: result.audience,
-                access_token_: RefCell::new(firebase_tokenid.to_owned()),
+                access_token_: RefCell::new(access_token.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
                 client: reqwest::blocking::Client::new(),
                 client_async: reqwest::Client::new(),
             })
         }
+    }
+}
+
+pub mod session_cookie {
+    use super::*;
+
+    pub static GOOGLE_OAUTH2_URL: &str = "https://accounts.google.com/o/oauth2/token";
+
+    /// See https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects/createSessionCookie
+    #[inline]
+    fn identitytoolkit_url(project_id: &str) -> String {
+        format!(
+            "https://identitytoolkit.googleapis.com/v1/projects/{}:createSessionCookie",
+            project_id
+        )
+    }
+
+    /// See https://cloud.google.com/identity-platform/docs/reference/rest/v1/CreateSessionCookieResponse
+    #[derive(Debug, Deserialize)]
+    struct CreateSessionCookieResponseDTO {
+        #[serde(rename = "sessionCookie")]
+        session_cookie_jwk: String,
+    }
+
+    /// https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects/createSessionCookie
+    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+    struct SessionLoginDTO {
+        /// Required. A valid Identity Platform ID token.
+        #[serde(rename = "idToken")]
+        id_token: String,
+        /// The number of seconds until the session cookie expires. Specify a duration in seconds, between five minutes and fourteen days, inclusively.
+        #[serde(rename = "validDuration")]
+        valid_duration: u64,
+        #[serde(rename = "tenantId")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tenant_id: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Oauth2ResponseDTO {
+        access_token: String,
+        expires_in: u64,
+        token_type: String,
+    }
+
+    /// Firebase Auth provides server-side session cookie management for traditional websites that rely on session cookies.
+    /// This solution has several advantages over client-side short-lived ID tokens,
+    /// which may require a redirect mechanism each time to update the session cookie on expiration:
+    ///
+    /// * Improved security via JWT-based session tokens that can only be generated using authorized service accounts.
+    /// * Stateless session cookies that come with all the benefit of using JWTs for authentication.
+    ///   The session cookie has the same claims (including custom claims) as the ID token, making the same permissions checks enforceable on the session cookies.
+    /// * Ability to create session cookies with custom expiration times ranging from 5 minutes to 2 weeks.
+    /// * Flexibility to enforce cookie policies based on application requirements: domain, path, secure, httpOnly, etc.
+    /// * Ability to revoke session cookies when token theft is suspected using the existing refresh token revocation API.
+    /// * Ability to detect session revocation on major account changes.
+    ///
+    /// See https://firebase.google.com/docs/auth/admin/manage-cookies
+    ///
+    /// The generated session cookie is a JWT that includes the firebase user id in the "sub" (subject) field.
+    ///
+    /// Arguments:
+    /// - `credentials` The credentials
+    /// - `id_token` An access token, sometimes called a firebase id token.
+    /// - `duration` The cookie duration
+    ///
+    pub fn create(
+        credentials: &credentials::Credentials,
+        id_token: String,
+        duration: chrono::Duration,
+    ) -> Result<String, FirebaseError> {
+        // Generate the assertion from the admin credentials
+        let assertion = crate::jwt::session_cookie::create_jwt_encoded(credentials, duration)?;
+
+        // Request Google Oauth2 to retrieve the access token in order to create a session cookie
+        let client = reqwest::blocking::Client::new();
+        let response_oauth2: Oauth2ResponseDTO = client
+            .post(GOOGLE_OAUTH2_URL)
+            .form(&[
+                ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
+                ("assertion", &assertion),
+            ])
+            .send()?
+            .json()?;
+
+        // Create a session cookie with the access token previously retrieved
+        let response_session_cookie_json: CreateSessionCookieResponseDTO = client
+            .post(&identitytoolkit_url(&credentials.project_id))
+            .bearer_auth(&response_oauth2.access_token)
+            .json(&SessionLoginDTO {
+                id_token,
+                valid_duration: duration.num_seconds() as u64,
+                tenant_id: None,
+            })
+            .send()?
+            .json()?;
+
+        Ok(response_session_cookie_json.session_cookie_jwk)
     }
 }
 
