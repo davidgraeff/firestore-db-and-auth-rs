@@ -23,6 +23,17 @@ identified by the firebase user id.
 
 * Build and run with `cargo run --example firebase_user`.
 
+## Session cookie example
+
+This example shows how to exchange a ID token, usually given by the firebase web framework on the client side,
+into a server-side session cookie.
+
+Firebase Auth provides server-side session cookie management for traditional websites that rely on session cookies.
+This solution has several advantages over client-side short-lived ID tokens,
+which may require a redirect mechanism each time to update the session cookie on expiration.
+
+* Build and run with `cargo run --example session_cookie`.
+
 ## Rocket Protected Route example
 
 [Rocket](https://rocket.rs) is a an easy to use web-framework for Rust.
