@@ -219,7 +219,7 @@ pub struct BatchGetDocumentsRequest {
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct MapValue {
-    pub fields: HashMap<String, Value>,
+    pub fields: Option<HashMap<String, Value>>,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
