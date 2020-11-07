@@ -540,3 +540,28 @@ pub struct WriteRequest {
     #[serde(rename = "streamId")]
     pub stream_id: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_deserializes_a_document_with_empty_mapvalue() {
+        let doc = r#"{
+        "name": "projects/firestore-db-and-auth/databases/(default)/documents/user/1",
+        "fields": {
+            "gender": {
+                "stringValue": "male"
+            },
+            "age": {
+                "integerValue": "35"
+            },
+            "profile": {
+                "mapValue": {}
+            }
+        },
+        "createTime": "2020-04-28T14:52:51.250511Z",
+        "updateTime": "2020-04-28T14:52:51.250511Z"
+        }"#;
+        let document: Result<crate::dto::Document, serde_json::Error> = serde_json::from_str(&doc);
+        assert!(document.is_ok(), true);
+    }
+}
