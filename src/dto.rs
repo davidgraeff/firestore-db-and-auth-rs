@@ -564,4 +564,67 @@ mod tests {
         let document: Result<crate::dto::Document, serde_json::Error> = serde_json::from_str(&doc);
         assert!(document.is_ok(), true);
     }
+
+    #[test]
+    fn it_deserializes_a_document_with_every_data_type() {
+        let doc = r#"{
+        "name": "projects/firestore-db-and-auth/databases/(default)/documents/user/1",
+        "fields": {
+            "exampleArray": {
+                "arrayValue": {
+                    "values": [
+                        {"stringValue": "string-example"},
+                        {"integerValue": "456"}
+                    ]
+                }
+            },
+            "exampleBytes": {
+                "bytesValue": "YWJj"
+            },
+            "exampleBoolean": {
+                "booleanValue": false
+            },
+            "exampleDoubleValue": {
+                "doubleValue": 3.85185988877447170611195588516985463707620329643077639047987759113311767578125
+            },
+            "exampleInteger": {
+                "integerValue": "1024"
+            },
+            "exampleMap": {
+                "mapValue": {
+                    "fields": {
+                        "age": {
+                            "integerValue": "1"
+                        },
+                        "name": {
+                            "stringValue": "Bobby Seale"
+                        }
+                    }
+                }
+            },
+            "exampleNull": {
+                "nullValue": null
+            },
+            "exampleTimestamp": {
+                "timestampValue": "2014-10-02T15:01:23Z"
+            },
+            "exampleString": {
+                "stringValue": "abc-def"
+            },
+            "exampleReferenceValue": {
+                "referenceValue": "projects/firestore-db-and-auth/databases/(default)/documents/test"
+            },
+            "exampleGeoPointValue": {
+                "geoPointValue": {
+                    "latitude": 48.830108,
+                    "longitude": 2.367104
+                }
+            }
+        },
+        "createTime": "2020-04-28T14:52:51.250511Z",
+        "updateTime": "2020-04-28T14:52:51.250511Z"
+        }"#;
+        let document: Result<crate::dto::Document, serde_json::Error> = serde_json::from_str(&doc);
+        assert!(document.is_ok(), true);
+    }
 }
