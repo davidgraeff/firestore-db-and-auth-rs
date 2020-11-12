@@ -37,14 +37,9 @@ pub(crate) fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value
         }
     } else if let Some(map_value) = v.map_value.as_ref() {
         let mut map: Map<String, serde_json::value::Value> = Map::new();
-        match &map_value.fields {
-            Some(map_fields) => {
-                for (map_key, map_v) in map_fields {
-                    map.insert(map_key.clone(), firebase_value_to_serde_value(&map_v));
-                }
-            },
-            None => {
-                // No values to insert into map
+        if let Some(map_fields) = &map_value.fields {
+            for (map_key, map_v) in map_fields {
+                map.insert(map_key.clone(), firebase_value_to_serde_value(&map_v));
             }
         }
         return Value::Object(map);
