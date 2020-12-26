@@ -25,13 +25,12 @@ Limitations:
 
 ### Cargo features
 
-* **native-tls**, **default-tls**, **rustls-tls**: Choose the SSL library for encrypted connections (https).
-  rustls-tls is the default (uses the crate rustls). native-tls will use openssl on Linux/Mac.
+* **native-tls**, **default-tls**, **rustls-tls**: Choose any of those features for encrypted connections (https).
+  rustls-tls is the default (the rustls crate will be used).
 
 * **rocket_support**: [Rocket](https://rocket.rs/) is a web framework.
-  This features enables rocket integration and adds a [Request Guard](https://rocket.rs/v0.4/guide/requests/#request-guards).
+  This feature enables rocket integration and adds a [Request Guard](https://rocket.rs/v0.4/guide/requests/#request-guards).
   Only Firestore Auth authorized requests can pass this guard.
-  This feature requires rust nightly, because Rocket itself requires nightly.
 
 ### Document operations
 
@@ -242,8 +241,8 @@ The tests expect a Firebase user with the ID given in `tests/test_user_id.txt` t
 
 ## Async vs Sync
 
-This crate uses reqwest as http client.
-reqwest supports a blocking and an async/await API.
+This crate uses reqwest under the hood as http client.
+reqwest supports blocking and async/await APIs.
 
 Right now only blocking APIs are provided, async/await variants are
 gated behind an "unstable" cargo feature.
