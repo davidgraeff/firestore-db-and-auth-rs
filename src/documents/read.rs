@@ -28,12 +28,7 @@ pub fn read<T>(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsR
 where
     for<'b> T: Deserialize<'b>,
 {
-    let document_name = format!(
-        "projects/{}/databases/(default)/documents/{}/{}",
-        auth.project_id(),
-        path,
-        document_id.as_ref()
-    );
+    let document_name = document_name(&auth.project_id(), path, document_id);
     read_by_name(auth, &document_name)
 }
 
@@ -46,12 +41,7 @@ where
 /// see [`read_to_end()`](https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end)
 pub fn contents(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsRef<str>) -> Result<String>
 {
-    let document_name = format!(
-        "projects/{}/databases/(default)/documents/{}/{}",
-        auth.project_id(),
-        path,
-        document_id.as_ref()
-    );
+    let document_name = document_name(&auth.project_id(), path, document_id);
     let mut resp = request_document(auth, document_name)?;
     let mut text = String::new();
     match resp.read_to_string(&mut text) {
@@ -71,4 +61,30 @@ fn request_document(auth: &impl FirebaseAuthBearer, document_name: impl AsRef<st
         .send()?;
 
     extract_google_api_error(resp, || document_name.as_ref().to_owned())
+}
+
+/// Simple method to join the path and document identifier in correct format
+fn document_name(project_id: impl AsRef<str>, path: impl AsRef<str>, document_id: impl AsRef<str>) -> String {
+    format!(
+        "projects/{}/databases/(default)/documents/{}/{}",
+        project_id.as_ref(),
+        path.as_ref(),
+        document_id.as_ref()
+    )
+}
+
+#[test]
+fn it_document_name_joins_paths() {
+    let project_id = "firebase-project";
+    let path = "one/two/three";
+    let document_id = "my-document";
+    assert_eq!(document_name(&project_id, &path, &document_id), "projects/firebase-project/databases/(default)/documents/one/two/three/my-document");
+}
+
+#[test]
+fn it_document_name_joins_invalid_path_fragments() {
+    let project_id = "firebase-project";
+    let path = "one/two//three/";
+    let document_id = "///my-document";
+    assert_eq!(document_name(&project_id, &path, &document_id), "projects/firebase-project/databases/(default)/documents/one/two//three/////my-document");
 }
