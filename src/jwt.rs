@@ -10,7 +10,7 @@ use std::slice::Iter;
 
 use crate::errors::FirebaseError;
 use biscuit::jwa::SignatureAlgorithm;
-use biscuit::{ClaimPresenceOptions, SingleOrMultiple, StringOrUri, ValidationOptions};
+use biscuit::{ClaimPresenceOptions, SingleOrMultiple, ValidationOptions};
 use std::ops::Deref;
 
 type Error = super::errors::FirebaseError;
@@ -135,7 +135,6 @@ where
     S: AsRef<str>,
 {
     use std::ops::Add;
-    use std::str::FromStr;
 
     use biscuit::{
         jws::{Header, RegisteredHeader},
@@ -149,9 +148,9 @@ where
     });
     let expected_claims = ClaimsSet::<JwtOAuthPrivateClaims> {
         registered: RegisteredClaims {
-            issuer: Some(FromStr::from_str(&credentials.client_email)?),
-            audience: Some(SingleOrMultiple::Single(StringOrUri::from_str(audience)?)),
-            subject: Some(StringOrUri::from_str(&credentials.client_email)?),
+            issuer: Some(credentials.client_email.clone()),
+            audience: Some(SingleOrMultiple::Single(audience.to_string())),
+            subject: Some(credentials.client_email.clone()),
             expiry: Some(biscuit::Timestamp::from(Utc::now().add(duration))),
             issued_at: Some(biscuit::Timestamp::from(Utc::now())),
             ..Default::default()

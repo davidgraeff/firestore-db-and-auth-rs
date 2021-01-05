@@ -37,8 +37,10 @@ pub(crate) fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value
         }
     } else if let Some(map_value) = v.map_value.as_ref() {
         let mut map: Map<String, serde_json::value::Value> = Map::new();
-        for (map_key, map_v) in &map_value.fields {
-            map.insert(map_key.clone(), firebase_value_to_serde_value(&map_v));
+        if let Some(map_fields) = &map_value.fields {
+            for (map_key, map_v) in map_fields {
+                map.insert(map_key.clone(), firebase_value_to_serde_value(&map_v));
+            }
         }
         return Value::Object(map);
     } else if let Some(string_value) = v.string_value.as_ref() {
@@ -80,7 +82,7 @@ pub(crate) fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value
             map.insert(map_key.to_owned(), serde_value_to_firebase_value(&map_v));
         }
         return dto::Value {
-            map_value: Some(dto::MapValue { fields: map }),
+            map_value: Some(dto::MapValue { fields: Some(map) }),
             ..Default::default()
         };
     } else if let Some(string_value) = v.as_str() {
@@ -156,7 +158,7 @@ where
 {
     let v = serde_json::to_value(pod)?;
     Ok(dto::Document {
-        fields: Some(serde_value_to_firebase_value(&v).map_value.unwrap().fields),
+        fields: serde_value_to_firebase_value(&v).map_value.unwrap().fields,
         ..Default::default()
     })
 }
