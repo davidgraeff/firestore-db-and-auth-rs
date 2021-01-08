@@ -29,9 +29,10 @@ pub struct WriteOptions {
 /// Except if the "merge" option (see [`WriteOptions::merge`]) is set.
 ///
 /// Example:
-///```rust
+///```no_run
 ///use firestore_db_and_auth::{Credentials, ServiceSession, documents, errors::Result, FirebaseAuthBearer};
 ///use serde::{Serialize,Deserialize};
+///# use firestore_db_and_auth::credentials::doctest_credentials;
 ///
 /// #[derive(Serialize, Deserialize)]
 /// struct DemoDTO {
@@ -62,8 +63,7 @@ pub struct WriteOptions {
 /// }
 ///
 /// # fn main() -> Result<()> {
-/// #   let cred = Credentials::from_file("firebase-service-account.json")?;
-/// #   let session = ServiceSession::new(cred)?;
+/// #   let session = ServiceSession::new(doctest_credentials())?;
 /// #   write(&session)?;
 /// #   write_partial(&session)?;
 /// #

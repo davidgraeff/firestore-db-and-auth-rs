@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::prelude::*;
 use std::sync::Arc;
 
 use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSetDTO, JWT_AUDIENCE_IDENTITY};
 use crate::errors::FirebaseError;
+use std::io::BufReader;
 
 type Error = super::errors::FirebaseError;
 
@@ -104,7 +104,7 @@ impl Credentials {
     ///
     /// let c : Credentials = Credentials::new(include_str!("../firebase-service-account.json"),
     ///                                         &[include_str!("../tests/service-account-for-tests.jwks")])?;
-    /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+    /// # ()
     /// ```
     ///
     /// You need two JWKS files for this crate to work:
@@ -141,10 +141,8 @@ impl Credentials {
     /// Do not use this method if this is not desired, for example in cloud functions that require fast cold start times.
     /// See [`Credentials::add_jwks_public_keys`] and [`Credentials::new`] as alternatives.
     pub fn from_file(credential_file: &str) -> Result<Self, Error> {
-        let mut f = File::open(credential_file)?;
-        let mut buffer = Vec::new();
-        f.read_to_end(&mut buffer)?;
-        let mut credentials: Credentials = serde_json::from_slice(buffer.as_slice())?;
+        let f = BufReader::new(File::open(credential_file)?);
+        let mut credentials: Credentials = serde_json::from_reader(f)?;
         credentials.compute_secret()?;
         credentials.download_google_jwks()?;
         Ok(credentials)
@@ -206,4 +204,30 @@ impl Credentials {
         }
         Ok(())
     }
+}
+
+#[doc(hidden)]
+#[allow(dead_code)]
+pub fn doctest_credentials() -> Credentials {
+    let mut c: Credentials = serde_json::from_str(include_str!("../tests/service-account-test.jwks")).unwrap();
+    c.add_jwks_public_keys(serde_json::from_str(include_str!("../tests/service-account-test.json")).unwrap());
+    c.compute_secret().unwrap();
+    c
+}
+
+#[test]
+fn deserialize_credentials() {
+    let c: Credentials = Credentials::new(
+        include_str!("../tests/service-account-test.json"),
+        &[include_str!("../tests/service-account-test.jwks")],
+    )
+        .expect("Failed to deserialize credentials");
+    assert_eq!(c.api_key, "api_key");
+
+    use std::path::PathBuf;
+    let mut credential_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    credential_file.push("tests/service-account-test.json");
+
+    let c = Credentials::from_file(credential_file.to_str().unwrap()).expect("Failed to deserialize credentials");
+    assert_eq!(c.api_key, "api_key");
 }

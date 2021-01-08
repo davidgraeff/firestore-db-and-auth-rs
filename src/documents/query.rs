@@ -5,17 +5,15 @@ use std::vec::IntoIter;
 /// Queries the database for specific documents, for example all documents in a collection of 'type' == "car".
 ///
 /// Example:
-/// ```rust
+/// ```no_run
 /// # use serde::{Serialize, Deserialize};
 /// #[derive(Debug, Serialize, Deserialize)]
 /// struct DemoDTO { a_string: String, an_int: u32, }
 ///
 /// use firestore_db_and_auth::{documents, dto};
 /// # use firestore_db_and_auth::{credentials::Credentials, ServiceSession, errors::Result};
-///
-/// # let credentials = Credentials::new(include_str!("../../firebase-service-account.json"),
-///                                         &[include_str!("../../tests/service-account-for-tests.jwks")])?;
-/// # let session = ServiceSession::new(credentials)?;
+/// # use firestore_db_and_auth::credentials::doctest_credentials;
+/// # let session = ServiceSession::new(doctest_credentials())?;
 ///
 /// let values: documents::Query = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id")?;
 /// for metadata in values {

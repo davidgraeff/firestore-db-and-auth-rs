@@ -48,13 +48,13 @@ pub struct JWKSetDTO {
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
 pub fn download_google_jwks(account_mail: &str) -> Result<JWKSetDTO, Error> {
-    let resp = reqwest::blocking::Client::new()
-        .get(&format!(
-            "https://www.googleapis.com/service_accounts/v1/jwk/{}",
-            account_mail
-        ))
-        .send()?;
-    let jwk_set: JWKSetDTO = resp.json()?;
+    let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
+    let resp = reqwest::blocking::Client::new().get(&url).send()?;
+    let res = resp.text()?;
+    let jwk_set: JWKSetDTO = serde_json::from_str(res.as_str()).map_err(|e| FirebaseError::Ser {
+        doc: Option::from(format!("Failed to parse jwkset of {}", &url)),
+        ser: e,
+    })?;
     Ok(jwk_set)
 }
 

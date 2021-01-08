@@ -23,7 +23,11 @@ struct DemoDTOPartial {
 
 #[test]
 fn service_account_session() -> errors::Result<()> {
-    let cred = credentials::Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
+    use std::path::PathBuf;
+    let mut credential_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    credential_file.push("firebase-service-account.json");
+
+    let cred = credentials::Credentials::from_file(credential_file.to_str().unwrap()).expect("Read credentials file");
     cred.verify()?;
 
     let mut session = ServiceSession::new(cred).unwrap();
@@ -82,7 +86,11 @@ fn service_account_session() -> errors::Result<()> {
 
 #[test]
 fn user_account_session() -> errors::Result<()> {
-    let cred = credentials::Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
+    use std::path::PathBuf;
+    let mut credential_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    credential_file.push("firebase-service-account.json");
+
+    let cred = credentials::Credentials::from_file(credential_file.to_str().unwrap()).expect("Read credentials file");
 
     println!("Refresh token from file");
     // Read refresh token from file if possible instead of generating a new refresh token each time
