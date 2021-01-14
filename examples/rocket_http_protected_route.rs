@@ -1,14 +1,13 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-use firestore_db_and_auth::{Credentials, rocket::FirestoreAuthSessionGuard};
-use rocket::{get, routes};
+use firestore_db_and_auth::{rocket::FirestoreAuthSessionGuard, Credentials};
+use rocket::config::Environment;
+use rocket::{get, routes, Config};
 
 fn main() {
     let credentials = Credentials::from_file("firebase-service-account.json").unwrap();
-    
-    let config = Config::build(Environment::Staging)
-        .port(8000)
-        .finalize()?;
+
+    let config = Config::build(Environment::Staging).port(8000).finalize()?;
 
     rocket::custom(config)
         .manage(credentials)
