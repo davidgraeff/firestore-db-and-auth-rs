@@ -156,8 +156,9 @@ use firestore_db_and_auth::{Credentials, ServiceSession};
 
 /// Create credentials object. You may as well do that programmatically.
 let cred = Credentials::from_file("firebase-service-account.json")
-    .expect("Read credentials file");
-
+    .expect("Read credentials file")
+    .download_jwkset()
+    .expect("Failed to download public keys");
 /// To use any of the Firestore methods, you need a session first. You either want
 /// an impersonated session bound to a Firebase Auth user or a service account session.
 let session = ServiceSession::new(&cred)
@@ -174,7 +175,9 @@ use firestore_db_and_auth::{Credentials, sessions};
 
 /// Create credentials object. You may as well do that programmatically.
 let cred = Credentials::from_file("firebase-service-account.json")
-    .expect("Read credentials file");
+    .expect("Read credentials file")
+    .download_jwkset()
+    .expect("Failed to download public keys");
 
 /// To use any of the Firestore methods, you need a session first.
 /// Create an impersonated session bound to a Firebase Auth user via your service account credentials.
@@ -200,7 +203,6 @@ The `by_access_token` method will fail if the token is not valid anymore.
 Please note that a session created this way is not able to automatically refresh its access token.
 (There is no *refresh_token* associated with it.)
 
-
 ## Cloud functions: Improve cold-start time
 
 The usual start up procedure includes three IO operations:
@@ -214,17 +216,20 @@ First download the 2 public key files:
 
 * https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com -> Store as `securetoken.jwks`
 * https://www.googleapis.com/service_accounts/v1/jwk/{your-service-account-email} -> Store as `service-account.jwks`
+* Merge the two files into one `firebase-service-account.jwks` 
 
 Create a `Credentials` object like so:
 
 ```rust
 use firestore_db_and_auth::Credentials;
-let c = Credentials::new(include_str!("firebase-service-account.json"),
-                         &[include_str!("securetoken.jwks"), include_str!("service-account.jwks")])?;
+let c = Credentials::new(include_str!("firebase-service-account.json"))?
+    .with_jwkset(&JWKSet::new(include_str!("firebase-service-account.jwks"))?)?;
 ```
 
 > Please note though, that Googles JWK keys change periodically.
-You probably want to redeploy your service with fresh public keys about every three weeks.
+> You probably want to redeploy your service with fresh public keys about every three weeks.
+> 
+> For long running service you want to call Credentials::download_google_jwks() periodically.
 
 ### More information
 
@@ -236,7 +241,7 @@ You probably want to redeploy your service with fresh public keys about every th
 ## Testing
 
 To perform a full integration test (`cargo test`), you need a valid "firebase-service-account.json" file.
-The tests expect a Firebase user with the ID given in `tests/test_user_id.txt` to exist.
+The tests expect a Firebase user with the ID given in `examples/test_user_id.txt` to exist.
 [More Information](/doc/integration_tests.md)
 
 ## Async vs Sync
@@ -244,7 +249,7 @@ The tests expect a Firebase user with the ID given in `tests/test_user_id.txt` t
 This crate uses reqwest under the hood as http client.
 reqwest supports blocking and async/await APIs.
 
-Right now only blocking APIs are provided, async/await variants are
+Right now only blocking APIs are provided, some async/await variants are
 gated behind an "unstable" cargo feature.
 
 #### What can be done to make this crate more awesome
