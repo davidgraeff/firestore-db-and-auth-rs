@@ -39,29 +39,40 @@ pub struct JWSEntry {
     pub(crate) ne: biscuit::jwk::RSAKeyParameters,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct JWKSetDTO {
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct JWKSet {
     pub keys: Vec<JWSEntry>,
 }
 
-/// Download the Google JWK Set for a given service account.
-/// The resulting set of JWKs need to be added to a credentials object
-/// for jwk verifications.
-pub fn download_google_jwks(account_mail: &str) -> Result<JWKSetDTO, Error> {
-    let resp = reqwest::blocking::Client::new()
-        .get(&format!(
-            "https://www.googleapis.com/service_accounts/v1/jwk/{}",
-            account_mail
-        ))
-        .send()?;
-    let jwk_set: JWKSetDTO = resp.json()?;
-    Ok(jwk_set)
+impl JWKSet {
+    /// Create a new JWKSetDTO instance from a given json string
+    /// You can use [`Credentials::add_jwks_public_keys`] to manually add more public keys later on.
+    /// You need two JWKS files for this crate to work:
+    /// * https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
+    /// * https://www.googleapis.com/service_accounts/v1/jwk/{your-service-account-email}
+    pub fn new(jwk_content: &str) -> Result<JWKSet, Error> {
+        let jwk_set: JWKSet = serde_json::from_str(jwk_content).map_err(|e| FirebaseError::Ser {
+            doc: Option::from(format!("Failed to parse jwkset. Return value: {}", jwk_content)),
+            ser: e,
+        })?;
+        Ok(jwk_set)
+    }
 }
 
 /// Download the Google JWK Set for a given service account.
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
-pub async fn download_google_jwks_async(account_mail: &str) -> Result<JWKSetDTO, Error> {
+pub fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
+    let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
+    let resp = reqwest::blocking::Client::new().get(&url).send()?;
+    Ok(resp.text()?)
+}
+
+/// Download the Google JWK Set for a given service account.
+/// The resulting set of JWKs need to be added to a credentials object
+/// for jwk verifications.
+#[cfg(feature = "unstable")]
+pub async fn download_google_jwks_async(account_mail: &str) -> Result<String, Error> {
     let resp = reqwest::Client::new()
         .get(&format!(
             "https://www.googleapis.com/service_accounts/v1/jwk/{}",
@@ -69,8 +80,7 @@ pub async fn download_google_jwks_async(account_mail: &str) -> Result<JWKSetDTO,
         ))
         .send()
         .await?;
-    let jwk_set: JWKSetDTO = resp.json().await?;
-    Ok(jwk_set)
+    Ok(resp.text().await?)
 }
 
 pub(crate) fn create_jwt_encoded<S: AsRef<str>>(

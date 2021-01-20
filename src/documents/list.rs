@@ -6,17 +6,15 @@ use super::*;
 /// This type is not suitable if you want to list documents of different types.
 ///
 /// Example:
-/// ```rust
+/// ```no_run
 /// # use serde::{Serialize, Deserialize};
 /// #[derive(Debug, Serialize, Deserialize)]
 /// struct DemoDTO { a_string: String, an_int: u32, }
 ///
 /// use firestore_db_and_auth::documents;
 /// # use firestore_db_and_auth::{credentials::Credentials, ServiceSession, errors::Result};
-///
-/// # let credentials = Credentials::new(include_str!("../../firebase-service-account.json"),
-///                                         &[include_str!("../../tests/service-account-for-tests.jwks")])?;
-/// # let session = ServiceSession::new(credentials)?;
+/// # use firestore_db_and_auth::credentials::doctest_credentials;
+/// # let session = ServiceSession::new(doctest_credentials())?;
 ///
 /// let values: documents::List<DemoDTO, _> = documents::list(&session, "tests");
 /// for doc_result in values {

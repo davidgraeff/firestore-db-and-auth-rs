@@ -35,23 +35,25 @@ where
 /// Return the raw unparsed content of the Firestore document. Methods like
 /// [`read()`](../documents/fn.read.html) will deserialize the JSON-encoded
 /// response into a known type `T`
-/// 
+///
 /// Note that this leverages [`std::io::Read`](https://doc.rust-lang.org/std/io/trait.Read.html) and the `read_to_string()` method to chunk the
 /// response. This will raise `FirebaseError::IO` if there are errors reading the stream. Please
 /// see [`read_to_end()`](https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end)
-pub fn contents(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsRef<str>) -> Result<String>
-{
+pub fn contents(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsRef<str>) -> Result<String> {
     let document_name = document_name(&auth.project_id(), path, document_id);
     let mut resp = request_document(auth, document_name)?;
     let mut text = String::new();
     match resp.read_to_string(&mut text) {
         Ok(_bytes) => Ok(text),
-        Err(e) => Err(FirebaseError::IO(e))
+        Err(e) => Err(FirebaseError::IO(e)),
     }
 }
 
 /// Executes the request to retrieve the document. Returns the response from `reqwest`
-fn request_document(auth: &impl FirebaseAuthBearer, document_name: impl AsRef<str>) -> Result<reqwest::blocking::Response> {
+fn request_document(
+    auth: &impl FirebaseAuthBearer,
+    document_name: impl AsRef<str>,
+) -> Result<reqwest::blocking::Response> {
     let url = firebase_url_base(document_name.as_ref());
 
     let resp = auth
@@ -78,7 +80,10 @@ fn it_document_name_joins_paths() {
     let project_id = "firebase-project";
     let path = "one/two/three";
     let document_id = "my-document";
-    assert_eq!(document_name(&project_id, &path, &document_id), "projects/firebase-project/databases/(default)/documents/one/two/three/my-document");
+    assert_eq!(
+        document_name(&project_id, &path, &document_id),
+        "projects/firebase-project/databases/(default)/documents/one/two/three/my-document"
+    );
 }
 
 #[test]
@@ -86,5 +91,8 @@ fn it_document_name_joins_invalid_path_fragments() {
     let project_id = "firebase-project";
     let path = "one/two//three/";
     let document_id = "///my-document";
-    assert_eq!(document_name(&project_id, &path, &document_id), "projects/firebase-project/databases/(default)/documents/one/two//three/////my-document");
+    assert_eq!(
+        document_name(&project_id, &path, &document_id),
+        "projects/firebase-project/databases/(default)/documents/one/two//three/////my-document"
+    );
 }

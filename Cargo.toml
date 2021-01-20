@@ -39,3 +39,20 @@ native-tls = ["reqwest/native-tls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
 unstable = []
 external_doc = []
+
+[[example]]
+name = "create_read_write_document"
+test = true
+
+[[example]]
+name = "firebase_user"
+test = true
+
+[[example]]
+name = "own_auth"
+test = true
+
+[[example]]
+name = "rocket_http_protected_route"
+test = true
+required-features = ["rustls-tls","rocket_support"]
