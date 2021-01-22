@@ -1,3 +1,9 @@
+//! # Data Transfer Object definitions
+//! In this module only those Data Transfer Objects (DTO) are defined, which are used by the firebase API
+//! to access, alter documents or firebase users.
+//!
+//! Domain specific DTOs for OAuth or session management are defined in [`crate::session`].
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
