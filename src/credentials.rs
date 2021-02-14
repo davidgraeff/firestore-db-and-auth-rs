@@ -2,14 +2,13 @@
 //! This module contains the [`crate::credentials::Credentials`] type, used by [`crate::sessions`] to create and maintain
 //! authentication tokens for accessing the Firebase REST API.
 
-use chrono::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::sync::Arc;
 
-use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSet, JWT_AUDIENCE_IDENTITY};
+use super::jwt::{create_jwt_encoded, download_google_jwks_async, verify_access_token, JWKSet, JWT_AUDIENCE_IDENTITY};
 use crate::errors::FirebaseError;
 use std::io::BufReader;
 
@@ -153,8 +152,8 @@ impl Credentials {
     ///     .download_jwkset()?;
     /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
     /// ```
-    pub fn download_jwkset(mut self) -> Result<Credentials, Error> {
-        self.download_google_jwks()?;
+    pub async fn download_jwkset(mut self) -> Result<Credentials, Error> {
+        self.download_google_jwks().await?;
         self.verify()?;
         Ok(self)
     }
@@ -165,7 +164,7 @@ impl Credentials {
         let access_token = create_jwt_encoded(
             &self,
             Some(["admin"].iter()),
-            Duration::hours(1),
+            std::time::Duration::from_secs(60 * 60),
             Some(self.client_id.clone()),
             None,
             JWT_AUDIENCE_IDENTITY,
@@ -210,10 +209,10 @@ impl Credentials {
     /// If you haven't called [`Credentials::add_jwks_public_keys`] to manually add public keys,
     /// this method will download one for your google service account and one for the oauth related
     /// securetoken@system.gserviceaccount.com service account.
-    pub fn download_google_jwks(&mut self) -> Result<(), Error> {
-        let jwks = download_google_jwks(&self.client_email)?;
+    pub async fn download_google_jwks(&mut self) -> Result<(), Error> {
+        let jwks = download_google_jwks_async(&self.client_email).await?;
         self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
-        let jwks = download_google_jwks("securetoken@system.gserviceaccount.com")?;
+        let jwks = download_google_jwks_async("securetoken@system.gserviceaccount.com").await?;
         self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
         Ok(())
     }

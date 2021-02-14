@@ -20,7 +20,6 @@ pub struct WriteOptions {
     pub merge: bool,
 }
 
-///
 /// Write a document to a given collection.
 ///
 /// If no document_id is given, Firestore will generate an ID. Check the [`WriteResult`] return value.
@@ -49,7 +48,7 @@ pub struct WriteOptions {
 ///
 /// fn write(session: &impl FirebaseAuthBearer) -> Result<()> {
 ///    let obj = DemoDTO { a_string: "abcd".to_owned(), an_int: 14, another_int: 10 };
-///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions::default())?;
+///    let result = documents::blocking::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions::default())?;
 ///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
 ///    Ok(())
 /// }
@@ -57,7 +56,7 @@ pub struct WriteOptions {
 /// /// Either via Option<> or by not having the fields in the structure, see DemoPartialDTO.
 /// fn write_partial(session: &impl FirebaseAuthBearer) -> Result<()> {
 ///    let obj = DemoPartialDTO { a_string: None, an_int: 16 };
-///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions{merge:true})?;
+///    let result = documents::blocking::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions{merge:true})?;
 ///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
 ///    Ok(())
 /// }
@@ -70,7 +69,6 @@ pub struct WriteOptions {
 /// #   Ok(())
 /// # }
 ///```
-
 ///
 /// ## Arguments
 /// * 'auth' The authentication token
@@ -78,15 +76,15 @@ pub struct WriteOptions {
 /// * 'document_id' The document id. Make sure that you do not include the document id in the path argument.
 /// * 'document' The document
 /// * 'options' Write options
-pub fn write<T>(
+pub async fn write<T>(
     auth: &impl FirebaseAuthBearer,
     path: &str,
     document_id: Option<impl AsRef<str>>,
     document: &T,
     options: WriteOptions,
 ) -> Result<WriteResult>
-where
-    T: Serialize,
+    where
+        T: Serialize,
 {
     let mut url = match document_id.as_ref() {
         Some(document_id) => firebase_url_extended(auth.project_id(), path, document_id.as_ref()),
@@ -101,25 +99,25 @@ where
     }
 
     let builder = if document_id.is_some() {
-        auth.client().patch(&url)
+        auth.client_async().patch(&url)
     } else {
-        auth.client().post(&url)
+        auth.client_async().post(&url)
     };
 
     let resp = builder
         .bearer_auth(auth.access_token().to_owned())
         .json(&firebase_document)
-        .send()?;
+        .send().await?;
 
-    let resp = extract_google_api_error(resp, || {
+    let resp = extract_google_api_error_async(resp, || {
         document_id
             .as_ref()
             .and_then(|f| Some(f.as_ref().to_owned()))
             .or(Some(String::new()))
             .unwrap()
-    })?;
+    }).await?;
 
-    let result_document: dto::Document = resp.json()?;
+    let result_document: dto::Document = resp.json().await?;
     let document_id = Path::new(&result_document.name)
         .file_name()
         .ok_or_else(|| FirebaseError::Generic("Resulting documents 'name' field is not a valid path"))?
@@ -149,4 +147,24 @@ where
         create_time,
         update_time,
     })
+}
+
+#[cfg(feature = "blocking")]
+pub mod blocking {
+    use super::*;
+
+    /// Write a document to a given collection.
+    /// See [`super::write()`]
+    pub fn write<T>(
+        auth: &impl FirebaseAuthBearer,
+        path: &str,
+        document_id: Option<impl AsRef<str>>,
+        document: &T,
+        options: WriteOptions,
+    ) -> Result<WriteResult>
+        where
+            T: Serialize,
+    {
+        Ok(auth.rt().block_on(super::write(auth, path, document_id, document, options))?)
+    }
 }

@@ -19,10 +19,6 @@ impl FirebaseAuthBearer for MyOwnSession {
     fn access_token(&self) -> String {
         self.access_token.clone()
     }
-    /// The access token, unchecked. Might be expired or in other ways invalid.
-    fn access_token_unchecked(&self) -> String {
-        self.access_token.clone()
-    }
     /// The reqwest http client.
     /// The `Client` holds a connection pool internally, so it is advised that it is reused for multiple, successive connections.
     fn client(&self) -> &reqwest::blocking::Client {

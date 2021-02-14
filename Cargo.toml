@@ -12,13 +12,14 @@ maintenance = { status = "passively-maintained" }
 repository = "https://github.com/davidgraeff/firestore-db-and-auth-rs"
 
 [dependencies]
-reqwest = { version = "0.11", default-features = false, features = ["json", "blocking"] }
+reqwest = { version = "0.11", default-features = false, features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 biscuit = "0.5"
 ring = "0.16"
 base64 = "0.13"
+tokio = { version="1.0", default-features = false, optional = true, features = ["rt"] }
 
 [dependencies.rocket]
 version = "0.4.6"
@@ -30,13 +31,13 @@ optional = true
 features = [ "external_doc", "rocket_support" ]
 
 [features]
-default = ["rustls-tls", "unstable"]
+default = ["rustls-tls", "blocking"]
 rocket_support = ["rocket"]
 rustls-tls = ["reqwest/rustls-tls"]
 default-tls = ["reqwest/default-tls"]
 native-tls = ["reqwest/native-tls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
-unstable = []
+blocking = ["tokio/rt"]
 external_doc = []
 
 [[example]]
