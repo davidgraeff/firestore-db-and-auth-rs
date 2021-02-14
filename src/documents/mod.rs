@@ -4,7 +4,7 @@
 //! Please check the root page of this documentation for examples.
 
 use super::dto;
-use super::errors::{extract_google_api_error, FirebaseError, Result};
+use super::errors::{extract_google_api_error_async, FirebaseError, Result};
 use super::firebase_rest_to_rust::{document_to_pod, pod_to_document};
 use super::FirebaseAuthBearer;
 

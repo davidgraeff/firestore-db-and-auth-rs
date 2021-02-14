@@ -3,14 +3,11 @@
 //! A session can be either for a service-account or impersonated via a firebase auth user id.
 
 use super::credentials;
-use super::errors::{extract_google_api_error, FirebaseError};
-use super::jwt::{
-    create_jwt, is_expired, jwt_update_expiry_if, verify_access_token, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
-    JWT_AUDIENCE_IDENTITY,
-};
+use super::errors::{extract_google_api_error_async, FirebaseError};
+use super::jwt::{create_jwt, verify_access_token, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE, JWT_AUDIENCE_IDENTITY};
 use super::FirebaseAuthBearer;
 
-use chrono::Duration;
+use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::ops::Deref;
@@ -18,6 +15,7 @@ use std::slice::Iter;
 
 pub mod user {
     use super::*;
+    use crate::jwt;
     use credentials::Credentials;
 
     #[inline]
@@ -45,8 +43,9 @@ pub mod user {
         pub api_key: String,
         access_token_: RefCell<String>,
         project_id_: String,
-        /// The http client. Replace or modify the client if you have special demands like proxy support
-        pub client: reqwest::blocking::Client,
+        /// Returns a tokio runtime for the blocking API feature
+        #[cfg(feature = "blocking")]
+        pub rt: tokio::runtime::Runtime,
         /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
         pub client_async: reqwest::Client,
     }
@@ -55,33 +54,14 @@ pub mod user {
         fn project_id(&self) -> &str {
             &self.project_id_
         }
-        /// Returns the current access token.
-        /// This method will automatically refresh your access token, if it has expired.
-        ///
-        /// If the refresh failed, this will
+
         fn access_token(&self) -> String {
-            let jwt = self.access_token_.borrow();
-            let jwt = jwt.as_str();
-
-            if is_expired(&jwt, 0).unwrap() {
-                // Unwrap: the token is always valid at this point
-                if let Ok(response) = get_new_access_token(&self.api_key, jwt) {
-                    self.access_token_.swap(&RefCell::new(response.id_token.clone()));
-                    return response.id_token;
-                } else {
-                    // Failed to refresh access token. Return an empty string
-                    return String::new();
-                }
-            }
-            jwt.to_owned()
-        }
-
-        fn access_token_unchecked(&self) -> String {
             self.access_token_.borrow().clone()
         }
 
-        fn client(&self) -> &reqwest::blocking::Client {
-            &self.client
+        #[cfg(feature = "blocking")]
+        fn rt(&self) -> &tokio::runtime::Runtime {
+            &self.rt
         }
 
         fn client_async(&self) -> &reqwest::Client {
@@ -91,16 +71,16 @@ pub mod user {
 
     /// Gets a new access token via an api_key and a refresh_token.
     /// This is a blocking operation.
-    fn get_new_access_token(
+    async fn get_new_access_token(
+        client: &reqwest::Client,
         api_key: &str,
         refresh_token: &str,
     ) -> Result<RefreshTokenToAccessTokenResponse, FirebaseError> {
         let request_body = vec![("grant_type", "refresh_token"), ("refresh_token", refresh_token)];
 
         let url = refresh_to_access_endpoint(api_key);
-        let client = reqwest::blocking::Client::new();
-        let response = client.post(&url).form(&request_body).send()?;
-        Ok(response.json()?)
+        let response = client.post(&url).form(&request_body).send().await?;
+        Ok(response.json().await?)
     }
 
     #[allow(non_snake_case)]
@@ -130,9 +110,15 @@ pub mod user {
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     struct RefreshTokenToAccessTokenResponse {
-        expires_in: String,
+        /// The remaining lifetime of the access token in seconds.
+        expires_in: i64,
+        /// The type of token returned. At this time, this field's value is always set to Bearer.
         token_type: String,
+        /// A token that you can use to obtain a new access token.
+        /// Refresh tokens are valid until the user revokes access.
         refresh_token: String,
+        /// Note: This property is only returned if your request included an identity scope, such as openid, profile, or email.
+        /// The value is a JSON Web Token (JWT) that contains digitally signed identity information about the user.
         id_token: String,
         user_id: String,
         project_id: String,
@@ -154,7 +140,7 @@ pub mod user {
         /// See:
         /// * https://firebase.google.com/docs/reference/rest/auth#section-refresh-token
         /// * https://firebase.google.com/docs/auth/admin/create-custom-tokens#create_custom_tokens_using_a_third-party_jwt_library
-        pub fn new(
+        pub async fn new(
             credentials: &Credentials,
             user_id: Option<&str>,
             firebase_tokenid: Option<&str>,
@@ -172,7 +158,7 @@ pub mod user {
 
             // Check if refresh_token is already sufficient
             if let Some(refresh_token) = refresh_token {
-                let r = Session::by_refresh_token(credentials, refresh_token);
+                let r = Session::by_refresh_token(credentials, refresh_token).await;
                 if r.is_ok() {
                     return r;
                 }
@@ -181,7 +167,7 @@ pub mod user {
             // Neither refresh token nor access token worked or are provided.
             // Try to get new new tokens for the given user_id via the REST API and the service-account credentials.
             if let Some(user_id) = user_id {
-                let r = Session::by_user_id(credentials, user_id, true);
+                let r = Session::by_user_id(credentials, user_id, true).await;
                 if r.is_ok() {
                     return r;
                 }
@@ -197,16 +183,19 @@ pub mod user {
         /// - `refresh_token` A refresh token.
         ///
         /// Async support: This is a blocking operation.
-        pub fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session, FirebaseError> {
-            let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token)?;
+        pub async fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session, FirebaseError> {
+            let client = reqwest::Client::new();
+            let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&client, &credentials.api_key, refresh_token).await?;
             Ok(Session {
                 user_id: r.user_id,
                 access_token_: RefCell::new(r.id_token),
                 refresh_token: Some(r.refresh_token),
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::blocking::Client::new(),
-                client_async: reqwest::Client::new(),
+                #[cfg(feature = "blocking")]
+                rt: tokio::runtime::Builder::new_current_thread().enable_all().build()
+                    .map_err(|_| FirebaseError::Generic("Failed to create tokio runtime"))?,
+                client_async: client,
             })
         }
 
@@ -219,7 +208,7 @@ pub mod user {
         ///    Google generates only a few dozens of refresh tokens before it starts to invalidate already generated ones.
         ///    For short lived, immutable, non-persisting services you do not want a refresh token.
         ///
-        pub fn by_user_id(
+        pub async fn by_user_id(
             credentials: &Credentials,
             user_id: &str,
             with_refresh_token: bool,
@@ -228,7 +217,7 @@ pub mod user {
             let jwt = create_jwt(
                 &credentials,
                 scope,
-                Duration::hours(1),
+                Duration::from_secs(60 * 60),
                 None,
                 Some(user_id.to_owned()),
                 JWT_AUDIENCE_IDENTITY,
@@ -240,12 +229,13 @@ pub mod user {
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
-            let resp = reqwest::blocking::Client::new()
+            let client = reqwest::Client::new();
+            let resp = client
                 .post(&token_endpoint(&credentials.api_key))
                 .json(&CustomJwtToFirebaseID::new(encoded, with_refresh_token))
-                .send()?;
-            let resp = extract_google_api_error(resp, || user_id.to_owned())?;
-            let r: CustomJwtToFirebaseIDResponse = resp.json()?;
+                .send().await?;
+            let resp = extract_google_api_error_async(resp, || user_id.to_owned()).await?;
+            let r: CustomJwtToFirebaseIDResponse = resp.json().await?;
 
             Ok(Session {
                 user_id: user_id.to_owned(),
@@ -253,8 +243,10 @@ pub mod user {
                 refresh_token: r.refreshToken,
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
-                client: reqwest::blocking::Client::new(),
-                client_async: reqwest::Client::new(),
+                #[cfg(feature = "blocking")]
+                rt: tokio::runtime::Builder::new_current_thread().enable_all().build()
+                    .map_err(|_| FirebaseError::Generic("Failed to create tokio runtime"))?,
+                client_async: client,
             })
         }
 
@@ -266,9 +258,31 @@ pub mod user {
                 access_token_: RefCell::new(firebase_tokenid.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
-                client: reqwest::blocking::Client::new(),
+                #[cfg(feature = "blocking")]
+                rt: tokio::runtime::Builder::new_current_thread().enable_all().build()
+                    .map_err(|_| FirebaseError::Generic("Failed to create tokio runtime"))?,
                 client_async: reqwest::Client::new(),
             })
+        }
+
+        /// Requests a new access token from the OAuth server, if the current token has expired.
+        ///
+        /// You should call this method periodically. The method returns the expire time in seconds.
+        pub async fn check_refresh_access_token(self: &mut Self) -> Result<i64, FirebaseError> {
+            let jwt = self.access_token_.borrow();
+            let jwt = jwt.as_str();
+
+            let exp_in_sec = jwt::expires(&jwt)?.as_secs() as i64;
+            if exp_in_sec > 0 {
+                return Ok(exp_in_sec);
+            }
+
+            get_new_access_token(&self.client_async, &self.api_key, jwt).await
+                .map(|response| {
+                    self.access_token_.swap(&RefCell::new(response.id_token.clone()));
+                    return response.expires_in;
+                }
+                )
         }
     }
 }
@@ -277,8 +291,8 @@ pub mod user {
 pub mod service_account {
     use super::*;
     use credentials::Credentials;
+    use crate::jwt;
 
-    use chrono::Duration;
     use std::cell::RefCell;
     use std::ops::Deref;
 
@@ -286,8 +300,9 @@ pub mod service_account {
     pub struct Session {
         /// The google credentials
         pub credentials: Credentials,
-        /// The http client. Replace or modify the client if you have special demands like proxy support
-        pub client: reqwest::blocking::Client,
+        /// Returns a tokio runtime for the blocking API feature
+        #[cfg(feature = "blocking")]
+        pub rt: tokio::runtime::Runtime,
         /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
         pub client_async: reqwest::Client,
         jwt: RefCell<AuthClaimsJWT>,
@@ -298,30 +313,14 @@ pub mod service_account {
         fn project_id(&self) -> &str {
             &self.credentials.project_id
         }
-        /// Return the encoded jwt to be used as bearer token. If the jwt
-        /// issue_at is older than 50 minutes, it will be updated to the current time.
+
         fn access_token(&self) -> String {
-            let mut jwt = self.jwt.borrow_mut();
-
-            if jwt_update_expiry_if(&mut jwt, 50) {
-                if let Some(secret) = self.credentials.keys.secret.as_ref() {
-                    if let Ok(v) = self.jwt.borrow().encode(&secret.deref()) {
-                        if let Ok(v2) = v.encoded() {
-                            self.access_token_.swap(&RefCell::new(v2.encode()));
-                        }
-                    }
-                }
-            }
-
             self.access_token_.borrow().clone()
         }
 
-        fn access_token_unchecked(&self) -> String {
-            self.access_token_.borrow().clone()
-        }
-
-        fn client(&self) -> &reqwest::blocking::Client {
-            &self.client
+        #[cfg(feature = "blocking")]
+        fn rt(&self) -> &tokio::runtime::Runtime {
+            &self.rt
         }
 
         fn client_async(&self) -> &reqwest::Client {
@@ -344,7 +343,7 @@ pub mod service_account {
             let jwt = create_jwt(
                 &credentials,
                 scope,
-                Duration::hours(1),
+                std::time::Duration::from_secs(60 * 60),
                 None,
                 None,
                 JWT_AUDIENCE_FIRESTORE,
@@ -360,9 +359,33 @@ pub mod service_account {
                 access_token_: RefCell::new(encoded),
                 jwt: RefCell::new(jwt),
                 credentials,
-                client: reqwest::blocking::Client::new(),
+                #[cfg(feature = "blocking")]
+                rt: tokio::runtime::Builder::new_current_thread().enable_all().build()
+                    .map_err(|_| FirebaseError::Generic("Failed to create tokio runtime"))?,
                 client_async: reqwest::Client::new(),
             })
+        }
+
+        /// Checks the access token expiry and refreshes if necessary.
+        ///
+        /// Implementation details: If the jwt, used as authentication bearer token,
+        /// issue_at field is older than 5 minutes, it will be updated to the current time.
+        pub async fn check_refresh_access_token(self: &mut Self) -> Result<std::time::Duration, FirebaseError> {
+            let mut jwt = self.jwt.borrow_mut();
+
+            let exp = jwt::expires_jwt(&jwt)?;
+            if exp.as_secs() > 60 * 5 {
+                return Ok(exp);
+            }
+
+            match self.credentials.keys.secret.as_ref() {
+                None => Err(FirebaseError::Generic("No credentials key, cannot sign access tokens!")),
+                Some(secret) => {
+                    let encoded_jwt = jwt::jwt_update_expiry_and_sign(&mut jwt, secret, std::time::Duration::from_secs(60 * 60))?;
+                    self.access_token_.swap(&RefCell::new(encoded_jwt));
+                    Ok(exp)
+                }
+            }
         }
     }
 }

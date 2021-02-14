@@ -1,7 +1,6 @@
 use super::*;
 use std::vec::IntoIter;
 
-///
 /// Queries the database for specific documents, for example all documents in a collection of 'type' == "car".
 ///
 /// Example:
@@ -15,12 +14,12 @@ use std::vec::IntoIter;
 /// # use firestore_db_and_auth::credentials::doctest_credentials;
 /// # let session = ServiceSession::new(doctest_credentials())?;
 ///
-/// let values: documents::Query = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id")?;
+/// let values: documents::Query = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id").await?;
 /// for metadata in values {
 ///     println!("id: {}, created: {}, updated: {}", &metadata.name, metadata.create_time.as_ref().unwrap(), metadata.update_time.as_ref().unwrap());
 ///     // Fetch the actual document
 ///     // The data is wrapped in a Result<> because fetching new data could have failed
-///     let doc : DemoDTO = documents::read_by_name(&session, &metadata.name)?;
+///     let doc : DemoDTO = documents::blocking::read_by_name(&session, &metadata.name)?;
 ///     println!("{:?}", doc);
 /// }
 /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
@@ -32,7 +31,7 @@ use std::vec::IntoIter;
 /// * 'value' The query / filter value. For example "car".
 /// * 'operator' The query operator. For example "EQUAL".
 /// * 'field' The query / filter field. For example "type".
-pub fn query(
+pub async fn query(
     auth: &impl FirebaseAuthBearer,
     collection_id: &str,
     value: serde_json::Value,
@@ -65,17 +64,35 @@ pub fn query(
     };
 
     let resp = auth
-        .client()
+        .client_async()
         .post(&url)
         .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
-        .send()?;
+        .send().await?;
 
-    let resp = extract_google_api_error(resp, || collection_id.to_owned())?;
+    let resp = extract_google_api_error_async(resp, || collection_id.to_owned()).await?;
 
-    let json: Option<Vec<dto::RunQueryResponse>> = resp.json()?;
+    let json: Option<Vec<dto::RunQueryResponse>> = resp.json().await?;
 
     Ok(Query(json.unwrap_or_default().into_iter()))
+}
+
+
+#[cfg(feature = "blocking")]
+mod blocking {
+    use super::*;
+
+    /// Queries the database for specific documents, for example all documents in a collection of 'type' == "car".
+    /// See [`super::query()`]
+    pub fn query(
+        auth: &impl FirebaseAuthBearer,
+        collection_id: &str,
+        value: serde_json::Value,
+        operator: dto::FieldOperator,
+        field: &str,
+    ) -> Result<Query> {
+        Ok(auth.rt().block_on(super::query(auth, collection_id, value, operator, field))?)
+    }
 }
 
 /// This type is returned as a result by [`query`].

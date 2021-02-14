@@ -4,14 +4,14 @@ use super::credentials::Credentials;
 
 use serde::{Deserialize, Serialize};
 
-use chrono::{Duration, Utc};
+use chrono::{Utc};
 use std::collections::HashSet;
 use std::slice::Iter;
 
 use crate::errors::FirebaseError;
 use biscuit::jwa::SignatureAlgorithm;
 use biscuit::{ClaimPresenceOptions, SingleOrMultiple, ValidationOptions};
-use std::ops::Deref;
+use std::ops::{Deref, Add};
 
 type Error = super::errors::FirebaseError;
 
@@ -62,16 +62,6 @@ impl JWKSet {
 /// Download the Google JWK Set for a given service account.
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
-pub fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
-    let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
-    let resp = reqwest::blocking::Client::new().get(&url).send()?;
-    Ok(resp.text()?)
-}
-
-/// Download the Google JWK Set for a given service account.
-/// The resulting set of JWKs need to be added to a credentials object
-/// for jwk verifications.
-#[cfg(feature = "unstable")]
 pub async fn download_google_jwks_async(account_mail: &str) -> Result<String, Error> {
     let resp = reqwest::Client::new()
         .get(&format!(
@@ -86,7 +76,7 @@ pub async fn download_google_jwks_async(account_mail: &str) -> Result<String, Er
 pub(crate) fn create_jwt_encoded<S: AsRef<str>>(
     credentials: &Credentials,
     scope: Option<Iter<S>>,
-    duration: chrono::Duration,
+    duration: std::time::Duration,
     client_id: Option<String>,
     user_id: Option<String>,
     audience: &str,
@@ -103,49 +93,43 @@ pub(crate) fn create_jwt_encoded<S: AsRef<str>>(
 /// Returns true if the access token (assumed to be a jwt) has expired
 ///
 /// An error is returned if the given access token string is not a jwt
-pub(crate) fn is_expired(access_token: &str, tolerance_in_minutes: i64) -> Result<bool, FirebaseError> {
-    let token = AuthClaimsJWT::new_encoded(&access_token);
-    let claims = token.unverified_payload()?;
-    if let Some(expiry) = claims.registered.expiry.as_ref() {
-        let diff: Duration = Utc::now().signed_duration_since(expiry.deref().clone());
-        return Ok(diff.num_minutes() - tolerance_in_minutes > 0);
-    }
-
-    Ok(true)
+pub(crate) fn expires(access_token: &str) -> Result<std::time::Duration, FirebaseError> {
+    expires_jwt(&AuthClaimsJWT::new_encoded(&access_token))
 }
 
-/// Returns true if the jwt was updated and needs signing
-pub(crate) fn jwt_update_expiry_if(jwt: &mut AuthClaimsJWT, expire_in_minutes: i64) -> bool {
-    let ref mut claims = jwt.payload_mut().unwrap().registered;
-
-    let now = biscuit::Timestamp::from(Utc::now());
-    if let Some(issued_at) = claims.issued_at.as_ref() {
-        let diff: Duration = Utc::now().signed_duration_since(issued_at.deref().clone());
-        if diff.num_minutes() > expire_in_minutes {
-            claims.issued_at = Some(now);
-        } else {
-            return false;
-        }
-    } else {
-        claims.issued_at = Some(now);
+pub(crate) fn expires_jwt(jwt: &AuthClaimsJWT) -> Result<std::time::Duration, FirebaseError> {
+    let claims = jwt.unverified_payload()?;
+    if let Some(expiry) = claims.registered.expiry.as_ref() {
+        return Ok(Utc::now().signed_duration_since(expiry.deref().clone()).to_std()
+            // A negative value means the token has expired, just return 0
+            .map_err(|_| std::time::Duration::from_secs(0)).unwrap());
     }
 
-    true
+    Ok(std::time::Duration::from_secs(0))
+}
+
+
+/// Updates the issued_at and expiry fields of the given jwt and return the signed jwt
+pub(crate) fn jwt_update_expiry_and_sign(jwt: &mut AuthClaimsJWT, secret: &biscuit::jws::Secret, expire_time: std::time::Duration) -> Result<String, FirebaseError> {
+    let ref mut claims = jwt.payload_mut().unwrap().registered;
+    claims.issued_at = Some(biscuit::Timestamp::from(Utc::now()));
+    let duration = chrono::Duration::from_std(expire_time).map_err(|_| chrono::Duration::hours(1)).unwrap();
+    claims.expiry = Some(biscuit::Timestamp::from(Utc::now().add(duration)));
+    let encoded = jwt.encode(&secret.deref()).map_err(|e| FirebaseError::JWT(e))?;
+    Ok(encoded.encoded().map_err(|e| FirebaseError::JWT(e))?.encode())
 }
 
 pub(crate) fn create_jwt<S>(
     credentials: &Credentials,
     scope: Option<Iter<S>>,
-    duration: chrono::Duration,
+    duration: std::time::Duration,
     client_id: Option<String>,
     user_id: Option<String>,
     audience: &str,
 ) -> Result<AuthClaimsJWT, Error>
-where
-    S: AsRef<str>,
+    where
+        S: AsRef<str>,
 {
-    use std::ops::Add;
-
     use biscuit::{
         jws::{Header, RegisteredHeader},
         ClaimsSet, Empty, RegisteredClaims, JWT,
@@ -161,7 +145,7 @@ where
             issuer: Some(credentials.client_email.clone()),
             audience: Some(SingleOrMultiple::Single(audience.to_string())),
             subject: Some(credentials.client_email.clone()),
-            expiry: Some(biscuit::Timestamp::from(Utc::now().add(duration))),
+            expiry: Some(biscuit::Timestamp::from(Utc::now().add( chrono::Duration::from_std(duration).unwrap()))),
             issued_at: Some(biscuit::Timestamp::from(Utc::now())),
             ..Default::default()
         },

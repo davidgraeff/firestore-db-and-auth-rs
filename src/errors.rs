@@ -153,28 +153,6 @@ struct GoogleRESTApiErrorWrapper {
 /// Arguments:
 /// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case
 /// - context: A function that will be called in an error case that returns a context string
-pub(crate) fn extract_google_api_error(
-    response: reqwest::blocking::Response,
-    context: impl Fn() -> String,
-) -> Result<reqwest::blocking::Response> {
-    if response.status() == 200 {
-        return Ok(response);
-    }
-
-    Err(extract_google_api_error_intern(
-        response.status().clone(),
-        response.text()?,
-        context,
-    ))
-}
-
-/// If the given reqwest response is status code 200, nothing happens
-/// Otherwise the response will be analysed if it contains a Google API Error response.
-/// See https://firebase.google.com/docs/reference/rest/auth#section-error-response
-///
-/// Arguments:
-/// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case
-/// - context: A function that will be called in an error case that returns a context string
 pub(crate) async fn extract_google_api_error_async(
     response: reqwest::Response,
     context: impl Fn() -> String,

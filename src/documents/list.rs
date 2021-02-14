@@ -31,8 +31,7 @@ use super::*;
 /// * 'auth' The authentication token
 /// * 'collection_id' The document path / collection; For example "my_collection" or "a/nested/collection"
 pub fn list<T, BEARER>(auth: &BEARER, collection_id: impl Into<String>) -> List<T, BEARER>
-where
-    BEARER: FirebaseAuthBearer,
+    where BEARER: FirebaseAuthBearer,
 {
     let collection_id = collection_id.into();
     List {
@@ -48,20 +47,20 @@ where
 }
 
 #[inline]
-fn get_new_data<'a>(
+async fn get_new_data<'a>(
     collection_id: &str,
     url: &str,
     auth: &'a impl FirebaseAuthBearer,
 ) -> Result<dto::ListDocumentsResponse> {
     let resp = auth
-        .client()
+        .client_async()
         .get(url)
         .bearer_auth(auth.access_token().to_owned())
-        .send()?;
+        .send().await?;
 
-    let resp = extract_google_api_error(resp, || collection_id.to_owned())?;
+    let resp = extract_google_api_error_async(resp, || collection_id.to_owned()).await?;
 
-    let json: dto::ListDocumentsResponse = resp.json()?;
+    let json: dto::ListDocumentsResponse = resp.json().await?;
     Ok(json)
 }
 
@@ -81,10 +80,11 @@ pub struct List<'a, T, BEARER> {
     phantom: std::marker::PhantomData<T>,
 }
 
+#[cfg(feature = "blocking")]
 impl<'a, T, BEARER> Iterator for List<'a, T, BEARER>
-where
-    for<'b> T: Deserialize<'b>,
-    BEARER: FirebaseAuthBearer,
+    where
+            for<'b> T: Deserialize<'b>,
+            BEARER: FirebaseAuthBearer,
 {
     type Item = Result<(T, dto::Document)>;
 
@@ -99,7 +99,7 @@ where
                 None => self.url.clone(),
             };
 
-            let result = get_new_data(&self.collection_id, &url, self.auth);
+            let result = self.auth.rt().block_on(get_new_data(&self.collection_id, &url, self.auth));
             match result {
                 Err(e) => {
                     self.done = true;

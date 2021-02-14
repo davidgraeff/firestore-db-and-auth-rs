@@ -127,7 +127,7 @@ fn user_account_session(cred: Credentials) -> errors::Result<()> {
     assert_eq!(user_session.project_id(), cred.project_id);
 
     println!("user::Session::by_access_token");
-    let user_session = sessions::user::Session::by_access_token(&cred, &user_session.access_token_unchecked())?;
+    let user_session = sessions::user::Session::by_access_token(&cred, &user_session.access_token())?;
 
     assert_eq!(user_session.user_id, TEST_USER_ID);
 
