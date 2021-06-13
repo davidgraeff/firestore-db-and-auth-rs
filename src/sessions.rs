@@ -18,6 +18,7 @@ use std::slice::Iter;
 
 pub mod user {
     use super::*;
+    use crate::dto::{OAuthResponse, SignInWithIdpRequest};
     use credentials::Credentials;
 
     #[inline]
@@ -31,6 +32,36 @@ pub mod user {
     #[inline]
     fn refresh_to_access_endpoint(v: &str) -> String {
         format!("https://securetoken.googleapis.com/v1/token?key={}", v)
+    }
+
+    /// Default OAuth2 Providers supported by Firebase.
+    /// see: * https://firebase.google.com/docs/projects/provisioning/configure-oauth?hl=en#add-idp
+    pub enum OAuth2Provider {
+        Apple,
+        AppleGameCenter,
+        Facebook,
+        GitHub,
+        Google,
+        GooglePlayGames,
+        LinkedIn,
+        Microsoft,
+        Twitter,
+        Yahoo,
+    }
+
+    fn get_provider(provider: OAuth2Provider) -> String {
+        match provider {
+            OAuth2Provider::Apple => "apple.com".to_string(),
+            OAuth2Provider::AppleGameCenter => "gc.apple.com".to_string(),
+            OAuth2Provider::Facebook => "facebook.com".to_string(),
+            OAuth2Provider::GitHub => "github.com".to_string(),
+            OAuth2Provider::Google => "google.com".to_string(),
+            OAuth2Provider::GooglePlayGames => "playgames.google.com".to_string(),
+            OAuth2Provider::LinkedIn => "linkedin.com".to_string(),
+            OAuth2Provider::Microsoft => "microsoft.com".to_string(),
+            OAuth2Provider::Twitter => "twitter.com".to_string(),
+            OAuth2Provider::Yahoo => "yahoo.com".to_string(),
+        }
     }
 
     /// An impersonated session.
@@ -280,6 +311,46 @@ pub mod user {
                 client: reqwest::blocking::Client::new(),
                 client_async: reqwest::Client::new(),
             })
+        }
+
+        /// Creates a new user session with OAuth2 provider token.
+        /// If user don't exist it's create new user in firestore
+        ///
+        /// Arguments:
+        /// - `credentials` The credentials.
+        /// - `access_token` access_token provided by OAuth2 provider.
+        /// - `request_uri` The URI to which the provider redirects the user back same as from .
+        /// - `provider` OAuth2Provider enum: Apple, AppleGameCenter, Facebook, GitHub, Google, GooglePlayGames, LinkedIn, Microsoft, Twitter, Yahoo.
+        /// - `with_refresh_token` A refresh token is returned as well. This should be persisted somewhere for later reuse.
+        ///    Google generates only a few dozens of refresh tokens before it starts to invalidate already generated ones.
+        ///    For short lived, immutable, non-persisting services you do not want a refresh token.
+        ///
+        pub fn by_oauth2(
+            credentials: &Credentials,
+            access_token: String,
+            provider: OAuth2Provider,
+            request_uri: String,
+            with_refresh_token: bool,
+        ) -> Result<Session, FirebaseError> {
+            let uri = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=".to_owned()
+                + &credentials.api_key;
+
+            let post_body = format!("access_token={}&providerId={}", access_token, get_provider(provider));
+            let return_idp_credential = true;
+            let return_secure_token = true;
+
+            let json = &SignInWithIdpRequest {
+                post_body,
+                request_uri,
+                return_idp_credential,
+                return_secure_token,
+            };
+
+            let response = reqwest::blocking::Client::new().post(&uri).json(&json).send()?;
+
+            let oauth_response: OAuthResponse = response.json()?;
+
+            self::Session::by_user_id(&credentials, &oauth_response.local_id, with_refresh_token)
         }
     }
 }
