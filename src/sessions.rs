@@ -353,7 +353,7 @@ pub mod session_cookie {
         duration: chrono::Duration,
     ) -> Result<String, FirebaseError> {
         // Generate the assertion from the admin credentials
-        let assertion = crate::jwt::session_cookie::create_jwt_encoded(credentials, duration)?;
+        let assertion = crate::jwt::session_cookie::create_jwt_encoded(credentials, chrono::Duration::minutes(1))?;
 
         // Request Google Oauth2 to retrieve the access token in order to create a session cookie
         let client = reqwest::blocking::Client::new();
