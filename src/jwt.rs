@@ -62,10 +62,18 @@ impl JWKSet {
 /// Download the Google JWK Set for a given service account.
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
+#[cfg(not(feature = "async"))]
 pub fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
     let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
     let resp = reqwest::blocking::Client::new().get(&url).send()?;
     Ok(resp.text()?)
+}
+
+#[cfg(feature = "async")]
+pub async fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
+    let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
+    let resp = reqwest::Client::new().get(&url).send().await?;
+    Ok(resp.text().await?)
 }
 
 /// Download the Google JWK Set for a given service account.

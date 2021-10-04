@@ -2,8 +2,9 @@
 //!
 //! A session can be either for a service-account or impersonated via a firebase auth user id.
 
+#![allow(unused_imports)]
 use super::credentials;
-use super::errors::{extract_google_api_error, FirebaseError};
+use super::errors::{extract_google_api_error, extract_google_api_error_async, FirebaseError};
 use super::jwt::{
     create_jwt, is_expired, jwt_update_expiry_if, verify_access_token, AuthClaimsJWT, JWT_AUDIENCE_FIRESTORE,
     JWT_AUDIENCE_IDENTITY,
@@ -15,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::slice::Iter;
+use tokio::sync::Mutex;
 
 pub mod user {
     use super::*;
@@ -74,14 +76,22 @@ pub mod user {
         pub refresh_token: Option<String>,
         /// The firebase projects API key, as defined in the credentials object
         pub api_key: String,
+
+        #[cfg(not(feature = "async"))]
         access_token_: RefCell<String>,
+        #[cfg(feature = "async")]
+        access_token_: Mutex<RefCell<String>>,
+
         project_id_: String,
         /// The http client. Replace or modify the client if you have special demands like proxy support
+        #[cfg(not(feature = "async"))]
         pub client: reqwest::blocking::Client,
+        #[cfg(feature = "async")]
         /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
         pub client_async: reqwest::Client,
     }
 
+    #[cfg_attr(feature = "async", async_trait::async_trait)]
     impl super::FirebaseAuthBearer for Session {
         fn project_id(&self) -> &str {
             &self.project_id_
@@ -90,6 +100,7 @@ pub mod user {
         /// This method will automatically refresh your access token, if it has expired.
         ///
         /// If the refresh failed, this will return an empty string.
+        #[cfg(not(feature = "async"))]
         fn access_token(&self) -> String {
             let jwt = self.access_token_.borrow();
             let jwt = jwt.as_str();
@@ -107,14 +118,44 @@ pub mod user {
             jwt.to_owned()
         }
 
+        #[cfg(not(feature = "async"))]
         fn access_token_unchecked(&self) -> String {
-            self.access_token_.borrow().clone()
+            self.access_token_.lock().unwrap().borrow().clone()
         }
 
+        #[cfg(feature = "async")]
+        async fn access_token_unchecked(&self) -> String {
+            self.access_token_.lock().await.borrow().clone()
+        }
+
+        #[cfg(feature = "async")]
+        async fn access_token(&self) -> String {
+            let jwt = {
+                let access_token = self.access_token_.lock().await;
+                let jwt = access_token.borrow();
+                jwt.clone()
+            };
+
+            if is_expired(&jwt, 0).unwrap() {
+                // Unwrap: the token is always valid at this point
+                if let Ok(response) = get_new_access_token(&self.api_key, &jwt).await {
+                    self.access_token_.lock().await.swap(&RefCell::new(response.id_token.clone()));
+                    return response.id_token;
+                } else {
+                    // Failed to refresh access token. Return an empty string
+                    return String::new();
+                }
+            }
+
+            self.access_token_.lock().await.borrow().clone()
+        }
+
+        #[cfg(not(feature = "async"))]
         fn client(&self) -> &reqwest::blocking::Client {
             &self.client
         }
 
+        #[cfg(feature = "async")]
         fn client_async(&self) -> &reqwest::Client {
             &self.client_async
         }
@@ -122,6 +163,7 @@ pub mod user {
 
     /// Gets a new access token via an api_key and a refresh_token.
     /// This is a blocking operation.
+    #[cfg(not(feature = "async"))]
     fn get_new_access_token(
         api_key: &str,
         refresh_token: &str,
@@ -132,6 +174,19 @@ pub mod user {
         let client = reqwest::blocking::Client::new();
         let response = client.post(&url).form(&request_body).send()?;
         Ok(response.json()?)
+    }
+
+    #[cfg(feature = "async")]
+    async fn get_new_access_token(
+        api_key: &str,
+        refresh_token: &str,
+    ) -> Result<RefreshTokenToAccessTokenResponse, FirebaseError> {
+        let request_body = vec![("grant_type", "refresh_token"), ("refresh_token", refresh_token)];
+
+        let url = refresh_to_access_endpoint(api_key);
+        let client = reqwest::Client::new();
+        let response = client.post(&url).form(&request_body).send().await?;
+        Ok(response.json().await?)
     }
 
     #[allow(non_snake_case)]
@@ -185,6 +240,7 @@ pub mod user {
         /// See:
         /// * https://firebase.google.com/docs/reference/rest/auth#section-refresh-token
         /// * https://firebase.google.com/docs/auth/admin/create-custom-tokens#create_custom_tokens_using_a_third-party_jwt_library
+        #[cfg(not(feature = "async"))]
         pub fn new(
             credentials: &Credentials,
             user_id: Option<&str>,
@@ -221,6 +277,43 @@ pub mod user {
             Err(FirebaseError::Generic("No parameter given"))
         }
 
+        #[cfg(feature = "async")]
+        pub async fn new(
+            credentials: &Credentials,
+            user_id: Option<&str>,
+            firebase_tokenid: Option<&str>,
+            refresh_token: Option<&str>,
+        ) -> Result<Session, FirebaseError> {
+            // Check if current tokenid is still valid
+            if let Some(firebase_tokenid) = firebase_tokenid {
+                let r = Session::by_access_token(credentials, firebase_tokenid);
+                if r.is_ok() {
+                    let mut r = r.unwrap();
+                    r.refresh_token = refresh_token.and_then(|f| Some(f.to_owned()));
+                    return Ok(r);
+                }
+            }
+
+            // Check if refresh_token is already sufficient
+            if let Some(refresh_token) = refresh_token {
+                let r = Session::by_refresh_token(credentials, refresh_token).await;
+                if r.is_ok() {
+                    return r;
+                }
+            }
+
+            // Neither refresh token nor access token worked or are provided.
+            // Try to get new new tokens for the given user_id via the REST API and the service-account credentials.
+            if let Some(user_id) = user_id {
+                let r = Session::by_user_id(credentials, user_id, true).await;
+                if r.is_ok() {
+                    return r;
+                }
+            }
+
+            Err(FirebaseError::Generic("No parameter given"))
+        }
+
         /// Create a new firestore user session via a valid refresh_token
         ///
         /// Arguments:
@@ -228,6 +321,7 @@ pub mod user {
         /// - `refresh_token` A refresh token.
         ///
         /// Async support: This is a blocking operation.
+        #[cfg(not(feature = "async"))]
         pub fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session, FirebaseError> {
             let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token)?;
             Ok(Session {
@@ -237,9 +331,22 @@ pub mod user {
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
                 client: reqwest::blocking::Client::new(),
+            })
+        }
+
+        #[cfg(feature = "async")]
+        pub async fn by_refresh_token(credentials: &Credentials, refresh_token: &str) -> Result<Session, FirebaseError> {
+            let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token).await?;
+            Ok(Session {
+                user_id: r.user_id,
+                access_token_: Mutex::new(RefCell::new(r.id_token)),
+                refresh_token: Some(r.refresh_token),
+                project_id_: credentials.project_id.to_owned(),
+                api_key: credentials.api_key.clone(),
                 client_async: reqwest::Client::new(),
             })
         }
+
 
         /// Create a new firestore user session with a fresh access token.
         ///
@@ -250,6 +357,7 @@ pub mod user {
         ///    Google generates only a few dozens of refresh tokens before it starts to invalidate already generated ones.
         ///    For short lived, immutable, non-persisting services you do not want a refresh token.
         ///
+        #[cfg(not(feature = "async"))]
         pub fn by_user_id(
             credentials: &Credentials,
             user_id: &str,
@@ -285,9 +393,49 @@ pub mod user {
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
                 client: reqwest::blocking::Client::new(),
+            })
+        }
+
+        #[cfg(feature = "async")]
+        pub async fn by_user_id(
+            credentials: &Credentials,
+            user_id: &str,
+            with_refresh_token: bool,
+        ) -> Result<Session, FirebaseError> {
+            let scope: Option<Iter<String>> = None;
+            let jwt = create_jwt(
+                &credentials,
+                scope,
+                Duration::hours(1),
+                None,
+                Some(user_id.to_owned()),
+                JWT_AUDIENCE_IDENTITY,
+            )?;
+            let secret = credentials
+                .keys
+                .secret
+                .as_ref()
+                .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
+            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
+
+            let resp = reqwest::Client::new()
+                .post(&token_endpoint(&credentials.api_key))
+                .json(&CustomJwtToFirebaseID::new(encoded, with_refresh_token))
+                .send()
+                .await?;
+            let resp = extract_google_api_error_async(resp, || user_id.to_owned()).await?;
+            let r: CustomJwtToFirebaseIDResponse = resp.json().await?;
+
+            Ok(Session {
+                user_id: user_id.to_owned(),
+                access_token_: Mutex::new(RefCell::new(r.idToken)),
+                refresh_token: r.refreshToken,
+                project_id_: credentials.project_id.to_owned(),
+                api_key: credentials.api_key.clone(),
                 client_async: reqwest::Client::new(),
             })
         }
+
 
         /// Create a new firestore user session by a valid access token
         ///
@@ -305,10 +453,15 @@ pub mod user {
             Ok(Session {
                 user_id: result.subject,
                 project_id_: result.audience,
+                #[cfg(feature = "async")]
+                access_token_: Mutex::new(RefCell::new(access_token.to_owned())),
+                #[cfg(not(feature = "async"))]
                 access_token_: RefCell::new(access_token.to_owned()),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
+                #[cfg(not(feature = "async"))]
                 client: reqwest::blocking::Client::new(),
+                #[cfg(feature = "async")]
                 client_async: reqwest::Client::new(),
             })
         }
@@ -325,6 +478,7 @@ pub mod user {
         ///    Google generates only a few dozens of refresh tokens before it starts to invalidate already generated ones.
         ///    For short lived, immutable, non-persisting services you do not want a refresh token.
         ///
+        #[cfg(not(feature = "async"))]
         pub fn by_oauth2(
             credentials: &Credentials,
             access_token: String,
@@ -351,6 +505,39 @@ pub mod user {
             let oauth_response: OAuthResponse = response.json()?;
 
             self::Session::by_user_id(&credentials, &oauth_response.local_id, with_refresh_token)
+        }
+
+        #[cfg(feature = "async")]
+        pub async fn by_oauth2(
+            credentials: &Credentials,
+            access_token: String,
+            provider: OAuth2Provider,
+            request_uri: String,
+            with_refresh_token: bool,
+        ) -> Result<Session, FirebaseError> {
+            let uri = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=".to_owned()
+                + &credentials.api_key;
+
+            let post_body = format!("access_token={}&providerId={}", access_token, get_provider(provider));
+            let return_idp_credential = true;
+            let return_secure_token = true;
+
+            let json = &SignInWithIdpRequest {
+                post_body,
+                request_uri,
+                return_idp_credential,
+                return_secure_token,
+            };
+
+            let response = reqwest::Client::new()
+                .post(&uri)
+                .json(&json)
+                .send()
+                .await?;
+
+            let oauth_response: OAuthResponse = response.json().await?;
+
+            self::Session::by_user_id(&credentials, &oauth_response.local_id, with_refresh_token).await
         }
     }
 }
@@ -467,19 +654,29 @@ pub mod service_account {
         /// The google credentials
         pub credentials: Credentials,
         /// The http client. Replace or modify the client if you have special demands like proxy support
+        #[cfg(not(feature = "async"))]
         pub client: reqwest::blocking::Client,
+        #[cfg(feature = "async")]
         /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
         pub client_async: reqwest::Client,
+        #[cfg(not(feature = "async"))]
         jwt: RefCell<AuthClaimsJWT>,
+        #[cfg(feature = "async")]
+        jwt: Mutex<RefCell<AuthClaimsJWT>>,
+        #[cfg(not(feature = "async"))]
         access_token_: RefCell<String>,
+        #[cfg(feature = "async")]
+        access_token_: Mutex<RefCell<String>>,
     }
 
+    #[cfg_attr(feature = "async", async_trait::async_trait)]
     impl super::FirebaseAuthBearer for Session {
         fn project_id(&self) -> &str {
             &self.credentials.project_id
         }
         /// Return the encoded jwt to be used as bearer token. If the jwt
         /// issue_at is older than 50 minutes, it will be updated to the current time.
+        #[cfg(not(feature = "async"))]
         fn access_token(&self) -> String {
             let mut jwt = self.jwt.borrow_mut();
 
@@ -496,14 +693,46 @@ pub mod service_account {
             self.access_token_.borrow().clone()
         }
 
+        #[cfg(not(feature = "async"))]
         fn access_token_unchecked(&self) -> String {
             self.access_token_.borrow().clone()
         }
 
+        #[cfg(feature = "async")]
+        async fn access_token(&self) -> String {
+            let maybe_jwt = {
+                let jwt_lck = self.jwt.lock().await;
+                let mut jwt = jwt_lck.borrow_mut();
+
+                if jwt_update_expiry_if(&mut jwt, 50) {
+                    self.credentials.keys.secret
+                        .as_ref()
+                        .and_then(|secret| jwt.clone().into_encoded(secret.deref()).ok())
+                } else {
+                    None
+                }
+            };
+
+            if let Some(v) = maybe_jwt {
+                if let Ok(v) = v.encoded() {
+                    self.access_token_.lock().await.swap(&RefCell::new(v.encode()));
+                }
+            }
+
+            self.access_token_.lock().await.borrow().clone()
+        }
+
+        #[cfg(feature = "async")]
+        async fn access_token_unchecked(&self) -> String {
+            self.access_token_.lock().await.borrow().clone()
+        }
+
+        #[cfg(not(feature = "async"))]
         fn client(&self) -> &reqwest::blocking::Client {
             &self.client
         }
 
+        #[cfg(feature = "async")]
         fn client_async(&self) -> &reqwest::Client {
             &self.client_async
         }
@@ -537,10 +766,20 @@ pub mod service_account {
             let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
 
             Ok(Session {
+                #[cfg(not(feature = "async"))]
                 access_token_: RefCell::new(encoded),
+                #[cfg(not(feature = "async"))]
                 jwt: RefCell::new(jwt),
+
+                #[cfg(feature = "async")]
+                access_token_: Mutex::new(RefCell::new(encoded)),
+                #[cfg(feature = "async")]
+                jwt: Mutex::new(RefCell::new(jwt)),
+
                 credentials,
+                #[cfg(not(feature = "async"))]
                 client: reqwest::blocking::Client::new(),
+                #[cfg(feature = "async")]
                 client_async: reqwest::Client::new(),
             })
         }

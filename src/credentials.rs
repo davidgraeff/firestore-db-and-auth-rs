@@ -153,11 +153,20 @@ impl Credentials {
     ///     .download_jwkset()?;
     /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
     /// ```
+    #[cfg(not(feature = "async"))]
     pub fn download_jwkset(mut self) -> Result<Credentials, Error> {
         self.download_google_jwks()?;
         self.verify()?;
         Ok(self)
     }
+
+    #[cfg(feature = "async")]
+    pub async fn download_jwkset(mut self) -> Result<Credentials, Error> {
+        self.download_google_jwks().await?;
+        self.verify()?;
+        Ok(self)
+    }
+
 
     /// Verifies that creating access tokens is possible with the given credentials and public keys.
     /// Returns an empty result type on success.
@@ -210,10 +219,20 @@ impl Credentials {
     /// If you haven't called [`Credentials::add_jwks_public_keys`] to manually add public keys,
     /// this method will download one for your google service account and one for the oauth related
     /// securetoken@system.gserviceaccount.com service account.
+    #[cfg(not(feature = "async"))]
     pub fn download_google_jwks(&mut self) -> Result<(), Error> {
         let jwks = download_google_jwks(&self.client_email)?;
         self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
         let jwks = download_google_jwks("securetoken@system.gserviceaccount.com")?;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
+        Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn download_google_jwks(&mut self) -> Result<(), Error> {
+        let jwks = download_google_jwks(&self.client_email).await?;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
+        let jwks = download_google_jwks("securetoken@system.gserviceaccount.com").await?;
         self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
         Ok(())
     }

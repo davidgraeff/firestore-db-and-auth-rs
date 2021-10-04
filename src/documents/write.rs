@@ -78,6 +78,7 @@ pub struct WriteOptions {
 /// * 'document_id' The document id. Make sure that you do not include the document id in the path argument.
 /// * 'document' The document
 /// * 'options' Write options
+#[cfg(not(feature = "async"))]
 pub fn write<T>(
     auth: &impl FirebaseAuthBearer,
     path: &str,
@@ -120,6 +121,82 @@ where
     })?;
 
     let result_document: dto::Document = resp.json()?;
+    let document_id = Path::new(&result_document.name)
+        .file_name()
+        .ok_or_else(|| FirebaseError::Generic("Resulting documents 'name' field is not a valid path"))?
+        .to_str()
+        .ok_or_else(|| FirebaseError::Generic("No valid unicode in 'name' field"))?
+        .to_owned();
+
+    let create_time = match result_document.create_time {
+        Some(f) => Some(
+            chrono::DateTime::parse_from_rfc3339(&f)
+                .map_err(|_| FirebaseError::Generic("Failed to parse rfc3339 date from 'create_time' field"))?
+                .with_timezone(&chrono::Utc),
+        ),
+        None => None,
+    };
+    let update_time = match result_document.update_time {
+        Some(f) => Some(
+            chrono::DateTime::parse_from_rfc3339(&f)
+                .map_err(|_| FirebaseError::Generic("Failed to parse rfc3339 date from 'update_time' field"))?
+                .with_timezone(&chrono::Utc),
+        ),
+        None => None,
+    };
+
+    Ok(WriteResult {
+        document_id,
+        create_time,
+        update_time,
+    })
+}
+
+#[cfg(feature = "async")]
+pub async fn write<T>(
+    auth: &impl FirebaseAuthBearer,
+    path: &str,
+    document_id: Option<impl AsRef<str>>,
+    document: &T,
+    options: WriteOptions,
+) -> Result<WriteResult>
+where
+    T: Serialize,
+{
+    let mut url = match document_id.as_ref() {
+        Some(document_id) => firebase_url_extended(auth.project_id(), path, document_id.as_ref()),
+        None => firebase_url(auth.project_id(), path),
+    };
+
+    let firebase_document = pod_to_document(&document)?;
+
+    if options.merge && firebase_document.fields.is_some() {
+        let fields = firebase_document.fields.as_ref().unwrap().keys().join(",");
+        url = format!("{}?currentDocument.exists=true&updateMask.fieldPaths={}", url, fields);
+    }
+
+    let builder = if document_id.is_some() {
+        auth.client_async().patch(&url)
+    } else {
+        auth.client_async().post(&url)
+    };
+
+    let resp = builder
+        .bearer_auth(auth.access_token().await.to_owned())
+        .json(&firebase_document)
+        .send()
+        .await?;
+
+    let resp = extract_google_api_error_async(resp, || {
+        document_id
+            .as_ref()
+            .and_then(|f| Some(f.as_ref().to_owned()))
+            .or(Some(String::new()))
+            .unwrap()
+    }).await?;
+
+    let result_document: dto::Document = resp.json()
+        .await?;
     let document_id = Path::new(&result_document.name)
         .file_name()
         .ok_or_else(|| FirebaseError::Generic("Resulting documents 'name' field is not a valid path"))?

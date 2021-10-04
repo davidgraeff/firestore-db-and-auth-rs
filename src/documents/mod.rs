@@ -2,9 +2,9 @@
 //!
 //! Interact with Firestore documents.
 //! Please check the root page of this documentation for examples.
-
+#![allow(unused_imports, dead_code)]
 use super::dto;
-use super::errors::{extract_google_api_error, FirebaseError, Result};
+use super::errors::{extract_google_api_error, extract_google_api_error_async, FirebaseError, Result};
 use super::firebase_rest_to_rust::{document_to_pod, pod_to_document};
 use super::FirebaseAuthBearer;
 
@@ -12,16 +12,22 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 mod delete;
-mod list;
-mod query;
 mod read;
 mod write;
 
+#[cfg(not(feature = "async"))]
+mod list;
+#[cfg(not(feature = "async"))]
+mod query;
+
 pub use delete::*;
-pub use list::*;
-pub use query::*;
 pub use read::*;
 pub use write::*;
+
+#[cfg(not(feature = "async"))]
+pub use list::*;
+#[cfg(not(feature = "async"))]
+pub use query::*;
 
 /// An [`Iterator`] implementation that provides a join method
 ///
