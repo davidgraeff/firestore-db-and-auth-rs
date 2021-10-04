@@ -78,7 +78,7 @@ pub struct WriteOptions {
 /// * 'document_id' The document id. Make sure that you do not include the document id in the path argument.
 /// * 'document' The document
 /// * 'options' Write options
-pub fn write<T>(
+pub async fn write<T>(
     auth: &impl FirebaseAuthBearer,
     path: &str,
     document_id: Option<impl AsRef<str>>,
@@ -107,19 +107,21 @@ where
     };
 
     let resp = builder
-        .bearer_auth(auth.access_token().to_owned())
+        .bearer_auth(auth.access_token().await.to_owned())
         .json(&firebase_document)
-        .send()?;
+        .send()
+        .await?;
 
-    let resp = extract_google_api_error(resp, || {
+    let resp = extract_google_api_error_async(resp, || {
         document_id
             .as_ref()
             .and_then(|f| Some(f.as_ref().to_owned()))
             .or(Some(String::new()))
             .unwrap()
-    })?;
+    })
+    .await?;
 
-    let result_document: dto::Document = resp.json()?;
+    let result_document: dto::Document = resp.json().await?;
     let document_id = Path::new(&result_document.name)
         .file_name()
         .ok_or_else(|| FirebaseError::Generic("Resulting documents 'name' field is not a valid path"))?

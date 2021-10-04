@@ -2,9 +2,9 @@
 //!
 //! Interact with Firestore documents.
 //! Please check the root page of this documentation for examples.
-
+#![allow(unused_imports, dead_code)]
 use super::dto;
-use super::errors::{extract_google_api_error, FirebaseError, Result};
+use super::errors::{extract_google_api_error, extract_google_api_error_async, FirebaseError, Result};
 use super::firebase_rest_to_rust::{document_to_pod, pod_to_document};
 use super::FirebaseAuthBearer;
 

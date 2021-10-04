@@ -6,11 +6,13 @@ use serde::{Deserialize, Serialize};
 
 use chrono::{Duration, Utc};
 use std::collections::HashSet;
+use std::ops::Add;
 use std::slice::Iter;
 
 use crate::errors::FirebaseError;
 use biscuit::jwa::SignatureAlgorithm;
 use biscuit::{ClaimPresenceOptions, SingleOrMultiple, ValidationOptions};
+use cache_control::CacheControl;
 use std::ops::Deref;
 
 type Error = super::errors::FirebaseError;
@@ -60,40 +62,34 @@ impl JWKSet {
 }
 
 /// Download the Google JWK Set for a given service account.
+/// Returns the JWKS alongside the maximum time the JWKS is valid for.
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
-pub fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
+pub async fn download_google_jwks(account_mail: &str) -> Result<(String, Option<Duration>), Error> {
     let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
-    let resp = reqwest::blocking::Client::new().get(&url).send()?;
-    Ok(resp.text()?)
+    let resp = reqwest::Client::new().get(&url).send().await?;
+    let max_age = resp
+        .headers()
+        .get("cache-control")
+        .and_then(|cache_control| cache_control.to_str().ok())
+        .and_then(|cache_control| CacheControl::from_value(cache_control))
+        .and_then(|cache_control| cache_control.max_age)
+        .and_then(|max_age| Duration::from_std(max_age).ok());
+
+    Ok((resp.text().await?, max_age))
 }
 
-/// Download the Google JWK Set for a given service account.
-/// The resulting set of JWKs need to be added to a credentials object
-/// for jwk verifications.
-#[cfg(feature = "unstable")]
-pub async fn download_google_jwks_async(account_mail: &str) -> Result<String, Error> {
-    let resp = reqwest::Client::new()
-        .get(&format!(
-            "https://www.googleapis.com/service_accounts/v1/jwk/{}",
-            account_mail
-        ))
-        .send()
-        .await?;
-    Ok(resp.text().await?)
-}
-
-pub(crate) fn create_jwt_encoded<S: AsRef<str>>(
+pub(crate) async fn create_jwt_encoded<S: AsRef<str>>(
     credentials: &Credentials,
-    scope: Option<Iter<S>>,
+    scope: Option<Iter<'_, S>>,
     duration: chrono::Duration,
     client_id: Option<String>,
     user_id: Option<String>,
     audience: &str,
 ) -> Result<String, Error> {
     let jwt = create_jwt(credentials, scope, duration, client_id, user_id, audience)?;
-    let secret = credentials
-        .keys
+    let secret_lock = credentials.keys.read().await;
+    let secret = secret_lock
         .secret
         .as_ref()
         .ok_or(Error::Generic("No private key added via add_keypair_key!"))?;
@@ -119,15 +115,19 @@ pub(crate) fn jwt_update_expiry_if(jwt: &mut AuthClaimsJWT, expire_in_minutes: i
     let ref mut claims = jwt.payload_mut().unwrap().registered;
 
     let now = biscuit::Timestamp::from(Utc::now());
+    let now_plus_hour = biscuit::Timestamp::from(Utc::now().add(Duration::hours(1)));
+
     if let Some(issued_at) = claims.issued_at.as_ref() {
         let diff: Duration = Utc::now().signed_duration_since(issued_at.deref().clone());
         if diff.num_minutes() > expire_in_minutes {
             claims.issued_at = Some(now);
+            claims.expiry = Some(now_plus_hour);
         } else {
             return false;
         }
     } else {
         claims.issued_at = Some(now);
+        claims.expiry = Some(now_plus_hour);
     }
 
     true
@@ -144,8 +144,6 @@ pub(crate) fn create_jwt<S>(
 where
     S: AsRef<str>,
 {
-    use std::ops::Add;
-
     use biscuit::{
         jws::{Header, RegisteredHeader},
         ClaimsSet, Empty, RegisteredClaims, JWT,
@@ -179,6 +177,7 @@ where
     Ok(JWT::new_decoded(header, expected_claims))
 }
 
+#[derive(Debug)]
 pub struct TokenValidationResult {
     pub claims: JwtOAuthPrivateClaims,
     pub audience: String,
@@ -194,7 +193,7 @@ impl TokenValidationResult {
     }
 }
 
-pub(crate) fn verify_access_token(
+pub(crate) async fn verify_access_token(
     credentials: &Credentials,
     access_token: &str,
 ) -> Result<TokenValidationResult, Error> {
@@ -208,6 +207,7 @@ pub(crate) fn verify_access_token(
         .ok_or(FirebaseError::Generic("No jwt kid"))?;
     let secret = credentials
         .decode_secret(kid)
+        .await?
         .ok_or(FirebaseError::Generic("No secret for kid"))?;
 
     let token = token.into_decoded(&secret.deref(), SignatureAlgorithm::RS256)?;
@@ -247,7 +247,10 @@ pub mod session_cookie {
     use super::*;
     use std::ops::Add;
 
-    pub(crate) fn create_jwt_encoded(credentials: &Credentials, duration: chrono::Duration) -> Result<String, Error> {
+    pub(crate) async fn create_jwt_encoded(
+        credentials: &Credentials,
+        duration: chrono::Duration,
+    ) -> Result<String, Error> {
         let scope = [
             "https://www.googleapis.com/auth/cloud-platform",
             "https://www.googleapis.com/auth/firebase.database",
@@ -285,8 +288,8 @@ pub mod session_cookie {
         };
         let jwt = JWT::new_decoded(header, expected_claims);
 
-        let secret = credentials
-            .keys
+        let secret_lock = credentials.keys.read().await;
+        let secret = secret_lock
             .secret
             .as_ref()
             .ok_or(Error::Generic("No private key added via add_keypair_key!"))?;

@@ -2,15 +2,17 @@
 //! This module contains the [`crate::credentials::Credentials`] type, used by [`crate::sessions`] to create and maintain
 //! authentication tokens for accessing the Firebase REST API.
 
-use chrono::Duration;
+use chrono::{offset, DateTime, Duration};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs::File;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSet, JWT_AUDIENCE_IDENTITY};
-use crate::errors::FirebaseError;
+use crate::{errors::FirebaseError, jwt::TokenValidationResult};
 use std::io::BufReader;
 
 type Error = super::errors::FirebaseError;
@@ -19,12 +21,23 @@ type Error = super::errors::FirebaseError;
 #[derive(Default, Clone)]
 pub(crate) struct Keys {
     pub pub_key: BTreeMap<String, Arc<biscuit::jws::Secret>>,
+    pub pub_key_expires_at: Option<DateTime<offset::Utc>>,
     pub secret: Option<Arc<biscuit::jws::Secret>>,
+}
+
+impl fmt::Debug for Keys {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keys")
+            .field("pub_key_expires_at", &self.pub_key_expires_at)
+            .field("pub_key", &self.pub_key.keys().collect::<Vec<&String>>())
+            .field("secret", &self.secret.is_some())
+            .finish()
+    }
 }
 
 /// Service account credentials
 ///
-/// Especially the service account email is required to retrieve the public java web key set (jwks)
+/// Especially the service account email is required to retrieve the public json web key set (jwks)
 /// for verifying Google Firestore tokens.
 ///
 /// The api_key is necessary for interacting with the Firestore REST API.
@@ -33,7 +46,7 @@ pub(crate) struct Keys {
 ///
 /// The private key is used for signing JWTs (javascript web token).
 /// A signed jwt, encoded as a base64 string, can be exchanged into a refresh and access token.
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Credentials {
     pub project_id: String,
     pub private_key_id: String,
@@ -42,7 +55,7 @@ pub struct Credentials {
     pub client_id: String,
     pub api_key: String,
     #[serde(default, skip)]
-    pub(crate) keys: Keys,
+    pub(crate) keys: Arc<RwLock<Keys>>,
 }
 
 /// Converts a PEM (ascii base64) encoded private key into the binary der representation
@@ -108,9 +121,9 @@ impl Credentials {
     /// You need two JWKS files for this crate to work:
     /// * https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
     /// * https://www.googleapis.com/service_accounts/v1/jwk/{your-service-account-email}
-    pub fn new(credentials_file_content: &str) -> Result<Credentials, Error> {
+    pub async fn new(credentials_file_content: &str) -> Result<Credentials, Error> {
         let mut credentials: Credentials = serde_json::from_str(credentials_file_content)?;
-        credentials.compute_secret()?;
+        credentials.compute_secret().await?;
         Ok(credentials)
     }
 
@@ -118,10 +131,10 @@ impl Credentials {
     ///
     /// This is a convenience method, that reads in the given credentials file and acts otherwise the same as
     /// the [`Credentials::new`] method.
-    pub fn from_file(credential_file: &str) -> Result<Self, Error> {
+    pub async fn from_file(credential_file: &str) -> Result<Self, Error> {
         let f = BufReader::new(File::open(credential_file)?);
         let mut credentials: Credentials = serde_json::from_reader(f)?;
-        credentials.compute_secret()?;
+        credentials.compute_secret().await?;
         Ok(credentials)
     }
 
@@ -129,9 +142,9 @@ impl Credentials {
     ///
     /// This method will also verify that the given JWKs files allow verification of Google access tokens.
     /// This is a convenience method, you may also just use [`Credentials::add_jwks_public_keys`].
-    pub fn with_jwkset(mut self, jwks: &JWKSet) -> Result<Credentials, Error> {
-        self.add_jwks_public_keys(jwks);
-        self.verify()?;
+    pub async fn with_jwkset(self, jwks: &JWKSet) -> Result<Credentials, Error> {
+        self.add_jwks_public_keys(jwks).await;
+        self.verify().await?;
         Ok(self)
     }
 
@@ -153,15 +166,15 @@ impl Credentials {
     ///     .download_jwkset()?;
     /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
     /// ```
-    pub fn download_jwkset(mut self) -> Result<Credentials, Error> {
-        self.download_google_jwks()?;
-        self.verify()?;
+    pub async fn download_jwkset(self) -> Result<Credentials, Error> {
+        self.download_google_jwks().await?;
+        self.verify().await?;
         Ok(self)
     }
 
     /// Verifies that creating access tokens is possible with the given credentials and public keys.
     /// Returns an empty result type on success.
-    pub fn verify(&self) -> Result<(), Error> {
+    pub async fn verify(&self) -> Result<(), Error> {
         let access_token = create_jwt_encoded(
             &self,
             Some(["admin"].iter()),
@@ -169,15 +182,31 @@ impl Credentials {
             Some(self.client_id.clone()),
             None,
             JWT_AUDIENCE_IDENTITY,
-        )?;
-        verify_access_token(&self, &access_token)?;
+        )
+        .await?;
+        verify_access_token(&self, &access_token).await?;
         Ok(())
+    }
+
+    pub async fn verify_token(&self, token: &str) -> Result<TokenValidationResult, Error> {
+        verify_access_token(&self, token).await
     }
 
     /// Find the secret in the jwt set that matches the given key id, if any.
     /// Used for jws validation
-    pub fn decode_secret(&self, kid: &str) -> Option<Arc<biscuit::jws::Secret>> {
-        self.keys.pub_key.get(kid).and_then(|f| Some(f.clone()))
+    pub async fn decode_secret(&self, kid: &str) -> Result<Option<Arc<biscuit::jws::Secret>>, Error> {
+        let should_refresh = {
+            let keys = self.keys.read().await;
+            keys.pub_key_expires_at
+                .map(|expires_at| expires_at - offset::Utc::now() < Duration::minutes(10))
+                .unwrap_or(false)
+        };
+
+        if should_refresh {
+            self.download_google_jwks().await?;
+        }
+
+        Ok(self.keys.read().await.pub_key.get(kid).and_then(|f| Some(f.clone())))
     }
 
     /// Add a JSON Web Key Set (JWKS) to allow verification of Google access tokens.
@@ -194,60 +223,86 @@ impl Credentials {
     /// c.verify()?;
     /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
     /// ```
-    pub fn add_jwks_public_keys(&mut self, jwkset: &JWKSet) {
+    pub async fn add_jwks_public_keys(&self, jwkset: &JWKSet) {
+        let mut keys = self.keys.write().await;
+
         for entry in jwkset.keys.iter() {
             if !entry.headers.key_id.is_some() {
                 continue;
             }
 
             let key_id = entry.headers.key_id.as_ref().unwrap().to_owned();
-            self.keys
-                .pub_key
-                .insert(key_id, Arc::new(entry.ne.jws_public_key_secret()));
+            keys.pub_key.insert(key_id, Arc::new(entry.ne.jws_public_key_secret()));
         }
     }
 
     /// If you haven't called [`Credentials::add_jwks_public_keys`] to manually add public keys,
     /// this method will download one for your google service account and one for the oauth related
     /// securetoken@system.gserviceaccount.com service account.
-    pub fn download_google_jwks(&mut self) -> Result<(), Error> {
-        let jwks = download_google_jwks(&self.client_email)?;
-        self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
-        let jwks = download_google_jwks("securetoken@system.gserviceaccount.com")?;
-        self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
+    pub async fn download_google_jwks(&self) -> Result<(), Error> {
+        {
+            let mut keys = self.keys.write().await;
+            keys.pub_key = BTreeMap::new();
+        }
+
+        let (jwks, max_age_client) = download_google_jwks(&self.client_email).await?;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?).await;
+        let (jwks, max_age_public) = download_google_jwks("securetoken@system.gserviceaccount.com").await?;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?).await;
+
+        let default_expiration = Duration::hours(2);
+        let max_age_client = max_age_client.unwrap_or(default_expiration);
+        let max_age_public = max_age_public.unwrap_or(default_expiration);
+
+        let expires_at = if max_age_client < max_age_public {
+            max_age_client
+        } else {
+            max_age_public
+        };
+
+        {
+            let mut keys = self.keys.write().await;
+            keys.pub_key_expires_at = Some(offset::Utc::now() + expires_at);
+        }
+
         Ok(())
     }
+
     /// Compute the Rsa keypair by using the private_key of the credentials file.
     /// You must call this if you have manually created a credentials object.
     ///
     /// This is automatically invoked if you use [`Credentials::new`] or [`Credentials::from_file`].
-    pub fn compute_secret(&mut self) -> Result<(), Error> {
+    pub async fn compute_secret(&mut self) -> Result<(), Error> {
         use biscuit::jws::Secret;
         use ring::signature;
 
         let vec = pem_to_der(&self.private_key)?;
         let key_pair = signature::RsaKeyPair::from_pkcs8(&vec)?;
-        self.keys.secret = Some(Arc::new(Secret::RsaKeyPair(Arc::new(key_pair))));
+        self.keys.write().await.secret = Some(Arc::new(Secret::RsaKeyPair(Arc::new(key_pair))));
         Ok(())
     }
 }
 
 #[doc(hidden)]
 #[allow(dead_code)]
-pub fn doctest_credentials() -> Credentials {
+pub async fn doctest_credentials() -> Credentials {
     let jwk_list = JWKSet::new(include_str!("../tests/service-account-test.jwks")).unwrap();
     Credentials::new(include_str!("../tests/service-account-test.json"))
+        .await
         .expect("Failed to deserialize credentials")
         .with_jwkset(&jwk_list)
+        .await
         .expect("JWK public keys verification failed")
 }
 
-#[test]
-fn deserialize_credentials() {
+#[tokio::test]
+async fn deserialize_credentials() {
     let jwk_list = JWKSet::new(include_str!("../tests/service-account-test.jwks")).unwrap();
     let c: Credentials = Credentials::new(include_str!("../tests/service-account-test.json"))
+        .await
         .expect("Failed to deserialize credentials")
         .with_jwkset(&jwk_list)
+        .await
         .expect("JWK public keys verification failed");
     assert_eq!(c.api_key, "api_key");
 
@@ -256,8 +311,10 @@ fn deserialize_credentials() {
     credential_file.push("tests/service-account-test.json");
 
     let c = Credentials::from_file(credential_file.to_str().unwrap())
+        .await
         .expect("Failed to open credentials file")
         .with_jwkset(&jwk_list)
+        .await
         .expect("JWK public keys verification failed");
     assert_eq!(c.api_key, "api_key");
 }

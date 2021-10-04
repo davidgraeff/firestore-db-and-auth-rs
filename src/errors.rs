@@ -40,6 +40,12 @@ pub enum FirebaseError {
         doc: Option<String>,
         ser: serde_json::Error,
     },
+    /// Verbose deserialization failure
+    SerdeVerbose {
+        doc: Option<String>,
+        input_doc: String,
+        ser: serde_json::Error,
+    },
     /// When the credentials.json file contains an invalid private key this error is returned
     RSA(ring::error::KeyRejected),
     /// Disk access errors
@@ -84,28 +90,36 @@ impl std::convert::From<reqwest::Error> for FirebaseError {
 
 impl fmt::Display for FirebaseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match self {
             FirebaseError::Generic(m) => write!(f, "{}", m),
-            FirebaseError::APIError(code, ref m, ref context) => {
+            FirebaseError::APIError(code, m, context) => {
                 write!(f, "API Error! Code {} - {}. Context: {}", code, m, context)
             }
-            FirebaseError::UnexpectedResponse(m, status, ref text, ref source) => {
+            FirebaseError::UnexpectedResponse(m, status, text, source) => {
                 writeln!(f, "{} - {}", &m, status)?;
                 writeln!(f, "{}", text)?;
                 writeln!(f, "{}", source)?;
                 Ok(())
             }
-            FirebaseError::Request(ref e) => e.fmt(f),
-            FirebaseError::JWT(ref e) => e.fmt(f),
-            FirebaseError::JWTValidation(ref e) => e.fmt(f),
-            FirebaseError::RSA(ref e) => e.fmt(f),
-            FirebaseError::IO(ref e) => e.fmt(f),
-            FirebaseError::Ser { ref doc, ref ser } => {
+            FirebaseError::Request(e) => e.fmt(f),
+            FirebaseError::JWT(e) => e.fmt(f),
+            FirebaseError::JWTValidation(e) => e.fmt(f),
+            FirebaseError::RSA(e) => e.fmt(f),
+            FirebaseError::IO(e) => e.fmt(f),
+            FirebaseError::Ser { doc, ser } => {
                 if let Some(doc) = doc {
                     writeln!(f, "{} in document {}", ser, doc)
                 } else {
                     ser.fmt(f)
                 }
+            }
+            FirebaseError::SerdeVerbose { doc, input_doc, ser } => {
+                let doc = doc.clone().unwrap_or("Unknown document".to_string());
+                writeln!(
+                    f,
+                    "Serde deserialization failed for document '{}' with error '{}' on input: '{}'",
+                    doc, ser, input_doc
+                )
             }
         }
     }
@@ -123,6 +137,7 @@ impl error::Error for FirebaseError {
             FirebaseError::RSA(_) => None,
             FirebaseError::IO(ref e) => Some(e),
             FirebaseError::Ser { ref ser, .. } => Some(ser),
+            FirebaseError::SerdeVerbose { ref ser, .. } => Some(ser),
         }
     }
 }
