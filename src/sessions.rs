@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::slice::Iter;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
+use std::sync::Arc;
 
 pub mod user {
     use super::*;
@@ -68,6 +69,7 @@ pub mod user {
 
     /// An impersonated session.
     /// Firestore rules will restrict your access.
+    #[derive(Clone)]
     pub struct Session {
         /// The firebase auth user id
         pub user_id: String,
@@ -80,7 +82,7 @@ pub mod user {
         #[cfg(not(feature = "async"))]
         access_token_: RefCell<String>,
         #[cfg(feature = "async")]
-        access_token_: Mutex<RefCell<String>>,
+        access_token_: Arc<RwLock<String>>,
 
         project_id_: String,
         /// The http client. Replace or modify the client if you have special demands like proxy support
@@ -125,21 +127,19 @@ pub mod user {
 
         #[cfg(feature = "async")]
         async fn access_token_unchecked(&self) -> String {
-            self.access_token_.lock().await.borrow().clone()
+            self.access_token_.read().await.clone()
         }
 
         #[cfg(feature = "async")]
         async fn access_token(&self) -> String {
-            let jwt = {
-                let access_token = self.access_token_.lock().await;
-                let jwt = access_token.borrow();
-                jwt.clone()
-            };
+            // Let's keep the access token locked for writes for the entirety of this function,
+            // so we don't have multiple refreshes going on at the same time
+            let mut jwt = self.access_token_.write().await;
 
             if is_expired(&jwt, 0).unwrap() {
                 // Unwrap: the token is always valid at this point
                 if let Ok(response) = get_new_access_token(&self.api_key, &jwt).await {
-                    self.access_token_.lock().await.swap(&RefCell::new(response.id_token.clone()));
+                    *jwt = response.id_token.clone();
                     return response.id_token;
                 } else {
                     // Failed to refresh access token. Return an empty string
@@ -147,7 +147,7 @@ pub mod user {
                 }
             }
 
-            self.access_token_.lock().await.borrow().clone()
+            jwt.clone()
         }
 
         #[cfg(not(feature = "async"))]
@@ -339,7 +339,7 @@ pub mod user {
             let r: RefreshTokenToAccessTokenResponse = get_new_access_token(&credentials.api_key, refresh_token).await?;
             Ok(Session {
                 user_id: r.user_id,
-                access_token_: Mutex::new(RefCell::new(r.id_token)),
+                access_token_: Arc::new(RwLock::new(r.id_token)),
                 refresh_token: Some(r.refresh_token),
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
@@ -428,7 +428,7 @@ pub mod user {
 
             Ok(Session {
                 user_id: user_id.to_owned(),
-                access_token_: Mutex::new(RefCell::new(r.idToken)),
+                access_token_: Arc::new(RwLock::new(r.idToken)),
                 refresh_token: r.refreshToken,
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
@@ -454,7 +454,7 @@ pub mod user {
                 user_id: result.subject,
                 project_id_: result.audience,
                 #[cfg(feature = "async")]
-                access_token_: Mutex::new(RefCell::new(access_token.to_owned())),
+                access_token_: Arc::new(RwLock::new(access_token.to_owned())),
                 #[cfg(not(feature = "async"))]
                 access_token_: RefCell::new(access_token.to_owned()),
                 refresh_token: None,
@@ -564,7 +564,7 @@ pub mod session_cookie {
     }
 
     /// https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects/createSessionCookie
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
     struct SessionLoginDTO {
         /// Required. A valid Identity Platform ID token.
         #[serde(rename = "idToken")]
@@ -650,6 +650,7 @@ pub mod service_account {
     use std::ops::Deref;
 
     /// Service account session
+    #[derive(Clone)]
     pub struct Session {
         /// The google credentials
         pub credentials: Credentials,
@@ -662,11 +663,11 @@ pub mod service_account {
         #[cfg(not(feature = "async"))]
         jwt: RefCell<AuthClaimsJWT>,
         #[cfg(feature = "async")]
-        jwt: Mutex<RefCell<AuthClaimsJWT>>,
+        jwt: Arc<RwLock<AuthClaimsJWT>>,
         #[cfg(not(feature = "async"))]
         access_token_: RefCell<String>,
         #[cfg(feature = "async")]
-        access_token_: Mutex<RefCell<String>>,
+        access_token_: Arc<RwLock<String>>,
     }
 
     #[cfg_attr(feature = "async", async_trait::async_trait)]
@@ -700,9 +701,11 @@ pub mod service_account {
 
         #[cfg(feature = "async")]
         async fn access_token(&self) -> String {
+            // Keeping the JWT and the access token in write mode so this area is
+            // a single-entrace critical section for refreshes sake
+            let mut access_token = self.access_token_.write().await;
             let maybe_jwt = {
-                let jwt_lck = self.jwt.lock().await;
-                let mut jwt = jwt_lck.borrow_mut();
+                let mut jwt = self.jwt.write().await;
 
                 if jwt_update_expiry_if(&mut jwt, 50) {
                     self.credentials.keys.secret
@@ -715,16 +718,16 @@ pub mod service_account {
 
             if let Some(v) = maybe_jwt {
                 if let Ok(v) = v.encoded() {
-                    self.access_token_.lock().await.swap(&RefCell::new(v.encode()));
+                    *access_token = v.encode();
                 }
             }
 
-            self.access_token_.lock().await.borrow().clone()
+            access_token.clone()
         }
 
         #[cfg(feature = "async")]
         async fn access_token_unchecked(&self) -> String {
-            self.access_token_.lock().await.borrow().clone()
+            self.access_token_.read().await.clone()
         }
 
         #[cfg(not(feature = "async"))]
@@ -772,9 +775,9 @@ pub mod service_account {
                 jwt: RefCell::new(jwt),
 
                 #[cfg(feature = "async")]
-                access_token_: Mutex::new(RefCell::new(encoded)),
+                access_token_: Arc::new(RwLock::new(encoded)),
                 #[cfg(feature = "async")]
-                jwt: Mutex::new(RefCell::new(jwt)),
+                jwt: Arc::new(RwLock::new(jwt)),
 
                 credentials,
                 #[cfg(not(feature = "async"))]
