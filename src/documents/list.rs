@@ -163,8 +163,9 @@ use core::pin::Pin;
 use std::boxed::Box;
 
 #[cfg(feature = "async")]
+#[derive(Clone)]
 struct ListInner {
-    auth: Box<dyn FirebaseAuthBearer>,
+    auth: Arc<Box<dyn FirebaseAuthBearer>>,
     next_page_token: Option<String>,
     documents: Vec<dto::Document>,
     current: usize,
@@ -181,18 +182,19 @@ where
     let collection_id = collection_id.into();
     Box::pin(stream::unfold(ListInner {
         url: firebase_url(auth.project_id(), &collection_id),
-        auth,
+        auth: Arc::new(auth),
         next_page_token: None,
         documents: vec![],
         current: 0,
         done: false,
         collection_id: collection_id.to_string(),
     }, |this| async move {
+        let mut this = this.clone();
         if this.done {
             return None;
         }
 
-        let this = if this.documents.len() <= this.current {
+        if this.documents.len() <= this.current {
             let url = match &this.next_page_token {
                 Some(next_page_token) => format!("{}pageToken={}", this.url, next_page_token),
                 None => this.url.clone(),
@@ -201,28 +203,27 @@ where
             let result = get_new_data(&this.collection_id, &url, &this.auth).await;
             match result {
                 Err(e) => {
-                    return Some((Err(e), ListInner { done: true, ..this}));
+                    this.done = true;
+                    return Some((Err(e), this));
                 }
                 Ok(v) => match v.documents {
                     None => return None,
-                    Some(documents) => ListInner {
-                        documents: documents,
-                        current: 0,
-                        next_page_token: v.next_page_token,
-                        ..this
+                    Some(documents) => {
+                        this.documents = documents;
+                        this.current = 0;
+                        this.next_page_token = v.next_page_token;
                     },
                 },
             }
-        } else { this };
+        }
 
         let doc = this.documents.get(this.current).unwrap().clone();
 
-        let this = ListInner { current: this.current + 1, ..this };
-        let this = if this.documents.len() <= this.current && this.next_page_token.is_none() {
-            ListInner { done: true, ..this }
-        } else {
-            this
-        };
+        this.current += 1;
+
+        if this.documents.len() <= this.current && this.next_page_token.is_none() {
+            this.done = true;
+        }
 
         let result = document_to_pod(&doc);
         match result {
