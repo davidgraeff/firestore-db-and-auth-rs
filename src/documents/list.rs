@@ -30,6 +30,7 @@ use super::*;
 /// ## Arguments
 /// * 'auth' The authentication token
 /// * 'collection_id' The document path / collection; For example "my_collection" or "a/nested/collection"
+#[cfg(not(feature = "async"))]
 pub fn list<T, BEARER>(auth: &BEARER, collection_id: impl Into<String>) -> List<T, BEARER>
 where
     BEARER: FirebaseAuthBearer,
@@ -47,7 +48,7 @@ where
     }
 }
 
-#[inline]
+#[cfg(not(feature = "async"))]
 fn get_new_data<'a>(
     collection_id: &str,
     url: &str,
@@ -70,6 +71,7 @@ fn get_new_data<'a>(
 ///
 /// Please note that this API acts as an iterator of same-like documents.
 /// This type is not suitable if you want to list documents of different types.
+#[cfg(not(feature = "async"))]
 pub struct List<'a, T, BEARER> {
     auth: &'a BEARER,
     next_page_token: Option<String>,
@@ -81,6 +83,7 @@ pub struct List<'a, T, BEARER> {
     phantom: std::marker::PhantomData<T>,
 }
 
+#[cfg(not(feature = "async"))]
 impl<'a, T, BEARER> Iterator for List<'a, T, BEARER>
 where
     for<'b> T: Deserialize<'b>,
@@ -137,4 +140,122 @@ where
             ))),
         }
     }
+}
+
+#[cfg(feature = "async")]
+use std::sync::{Arc, Mutex};
+
+#[cfg(feature = "async")]
+use std::ops::DerefMut;
+
+#[cfg(feature = "async")]
+use futures::{
+    Future,
+    stream::{self, Stream},
+    task::{
+        Context,
+        Poll,
+    },
+};
+#[cfg(feature = "async")]
+use core::pin::Pin;
+#[cfg(feature = "async")]
+use std::boxed::Box;
+
+#[cfg(feature = "async")]
+struct ListInner {
+    auth: Box<dyn FirebaseAuthBearer>,
+    next_page_token: Option<String>,
+    documents: Vec<dto::Document>,
+    current: usize,
+    done: bool,
+    url: String,
+    collection_id: String,
+}
+
+#[cfg(feature = "async")]
+pub fn list<T>(auth: Box<dyn FirebaseAuthBearer>, collection_id: impl Into<String>) -> Pin<Box<dyn Stream<Item = Result<(T, dto::Document)>>>>
+where
+    for<'b> T: Deserialize<'b> + 'static,
+{
+    let collection_id = collection_id.into();
+    Box::pin(stream::unfold(ListInner {
+        url: firebase_url(auth.project_id(), &collection_id),
+        auth,
+        next_page_token: None,
+        documents: vec![],
+        current: 0,
+        done: false,
+        collection_id: collection_id.to_string(),
+    }, |this| async move {
+        if this.done {
+            return None;
+        }
+
+        let this = if this.documents.len() <= this.current {
+            let url = match &this.next_page_token {
+                Some(next_page_token) => format!("{}pageToken={}", this.url, next_page_token),
+                None => this.url.clone(),
+            };
+
+            let result = get_new_data(&this.collection_id, &url, &this.auth).await;
+            match result {
+                Err(e) => {
+                    return Some((Err(e), ListInner { done: true, ..this}));
+                }
+                Ok(v) => match v.documents {
+                    None => return None,
+                    Some(documents) => ListInner {
+                        documents: documents,
+                        current: 0,
+                        next_page_token: v.next_page_token,
+                        ..this
+                    },
+                },
+            }
+        } else { this };
+
+        let doc = this.documents.get(this.current).unwrap().clone();
+
+        let this = ListInner { current: this.current + 1, ..this };
+        let this = if this.documents.len() <= this.current && this.next_page_token.is_none() {
+            ListInner { done: true, ..this }
+        } else {
+            this
+        };
+
+        let result = document_to_pod(&doc);
+        match result {
+            Err(e) => Some((Err(e), this)),
+            Ok(pod) => Some((Ok((
+                pod,
+                dto::Document {
+                    update_time: doc.update_time.clone(),
+                    create_time: doc.create_time.clone(),
+                    name: doc.name.clone(),
+                    fields: None,
+                },
+            )), this)),
+        }
+    }))
+}
+
+#[cfg(feature = "async")]
+async fn get_new_data<'a>(
+    collection_id: &str,
+    url: &str,
+    auth: &'a Box<dyn FirebaseAuthBearer>,
+) -> Result<dto::ListDocumentsResponse> {
+    let resp = auth
+        .client_async()
+        .get(url)
+        .bearer_auth(auth.access_token().await)
+        .send()
+        .await?;
+
+    let resp = extract_google_api_error_async(resp, || collection_id.to_owned())
+        .await?;
+
+    let json: dto::ListDocumentsResponse = resp.json().await?;
+    Ok(json)
 }

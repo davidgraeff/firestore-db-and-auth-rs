@@ -14,18 +14,16 @@ use std::path::Path;
 mod delete;
 mod read;
 mod write;
-
-#[cfg(not(feature = "async"))]
 mod list;
+
 #[cfg(not(feature = "async"))]
 mod query;
 
 pub use delete::*;
 pub use read::*;
 pub use write::*;
-
-#[cfg(not(feature = "async"))]
 pub use list::*;
+
 #[cfg(not(feature = "async"))]
 pub use query::*;
 
