@@ -164,8 +164,8 @@ use std::boxed::Box;
 
 #[cfg(feature = "async")]
 #[derive(Clone)]
-struct ListInner {
-    auth: Arc<Box<dyn FirebaseAuthBearer>>,
+struct ListInner<AUTH> {
+    auth: AUTH,
     next_page_token: Option<String>,
     documents: Vec<dto::Document>,
     current: usize,
@@ -175,14 +175,15 @@ struct ListInner {
 }
 
 #[cfg(feature = "async")]
-pub fn list<T>(auth: Box<dyn FirebaseAuthBearer>, collection_id: impl Into<String>) -> Pin<Box<dyn Stream<Item = Result<(T, dto::Document)>>>>
+pub fn list<T, AUTH>(auth: AUTH, collection_id: impl Into<String>) -> Pin<Box<dyn Stream<Item = Result<(T, dto::Document)>> + Send>>
 where
     for<'b> T: Deserialize<'b> + 'static,
+    AUTH: FirebaseAuthBearer + Clone + Send + Sync + 'static,
 {
     let collection_id = collection_id.into();
     Box::pin(stream::unfold(ListInner {
         url: firebase_url(auth.project_id(), &collection_id),
-        auth: Arc::new(auth),
+        auth,
         next_page_token: None,
         documents: vec![],
         current: 0,
@@ -245,7 +246,7 @@ where
 async fn get_new_data<'a>(
     collection_id: &str,
     url: &str,
-    auth: &'a Box<dyn FirebaseAuthBearer>,
+    auth: &'a impl FirebaseAuthBearer,
 ) -> Result<dto::ListDocumentsResponse> {
     let resp = auth
         .client_async()
