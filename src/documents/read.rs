@@ -110,7 +110,7 @@ async fn request_document(
     let resp = auth
         .client_async()
         .get(&url)
-        .bearer_auth(auth.access_token().await.to_owned())
+        .bearer_auth(auth.access_token().await)
         .send()
         .await?;
 

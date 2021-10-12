@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use chrono::{Duration, Utc};
 use std::collections::HashSet;
 use std::slice::Iter;
+use std::ops::Add;
 
 use crate::errors::FirebaseError;
 use biscuit::jwa::SignatureAlgorithm;
@@ -127,15 +128,19 @@ pub(crate) fn jwt_update_expiry_if(jwt: &mut AuthClaimsJWT, expire_in_minutes: i
     let ref mut claims = jwt.payload_mut().unwrap().registered;
 
     let now = biscuit::Timestamp::from(Utc::now());
+    let now_plus_hour = biscuit::Timestamp::from(Utc::now().add(Duration::hours(1)));
+
     if let Some(issued_at) = claims.issued_at.as_ref() {
         let diff: Duration = Utc::now().signed_duration_since(issued_at.deref().clone());
         if diff.num_minutes() > expire_in_minutes {
             claims.issued_at = Some(now);
+            claims.expiry = Some(now_plus_hour);
         } else {
             return false;
         }
     } else {
         claims.issued_at = Some(now);
+        claims.expiry = Some(now_plus_hour);
     }
 
     true
@@ -152,8 +157,6 @@ pub(crate) fn create_jwt<S>(
 where
     S: AsRef<str>,
 {
-    use std::ops::Add;
-
     use biscuit::{
         jws::{Header, RegisteredHeader},
         ClaimsSet, Empty, RegisteredClaims, JWT,

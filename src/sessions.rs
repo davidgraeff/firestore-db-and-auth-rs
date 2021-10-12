@@ -710,7 +710,7 @@ pub mod service_account {
                 if jwt_update_expiry_if(&mut jwt, 50) {
                     self.credentials.keys.secret
                         .as_ref()
-                        .and_then(|secret| jwt.clone().encode(secret.deref()).ok())
+                        .and_then(|secret| jwt.clone().encode(&secret.deref()).ok())
                 } else {
                     None
                 }
