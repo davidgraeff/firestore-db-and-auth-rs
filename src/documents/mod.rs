@@ -15,17 +15,14 @@ mod delete;
 mod read;
 mod write;
 mod list;
-
-#[cfg(not(feature = "async"))]
 mod query;
 
 pub use delete::*;
 pub use read::*;
 pub use write::*;
 pub use list::*;
-
-#[cfg(not(feature = "async"))]
 pub use query::*;
+
 
 /// An [`Iterator`] implementation that provides a join method
 ///

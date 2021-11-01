@@ -1,6 +1,6 @@
 [package]
 name = "firestore-db-and-auth"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["David Gräff <david.graeff@web.de>"]
 edition = "2018"
 license = "MIT"
@@ -20,7 +20,7 @@ biscuit = "0.5"
 ring = "0.16"
 base64 = "0.13"
 async-trait = "0.1"
-tokio = "1.12"
+tokio = { version = "1.13", features = ["macros"] }
 futures = "0.3"
 pin-project = "1.0"
 
@@ -40,7 +40,6 @@ rustls-tls = ["reqwest/rustls-tls"]
 default-tls = ["reqwest/default-tls"]
 native-tls = ["reqwest/native-tls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
-async = []
 unstable = []
 external_doc = []
 

@@ -32,7 +32,7 @@ use std::vec::IntoIter;
 /// * 'value' The query / filter value. For example "car".
 /// * 'operator' The query operator. For example "EQUAL".
 /// * 'field' The query / filter field. For example "type".
-pub fn query(
+pub async fn query(
     auth: &impl FirebaseAuthBearer,
     collection_id: &str,
     value: serde_json::Value,
@@ -67,13 +67,14 @@ pub fn query(
     let resp = auth
         .client()
         .post(&url)
-        .bearer_auth(auth.access_token().to_owned())
+        .bearer_auth(auth.access_token().await)
         .json(&query_request)
-        .send()?;
+        .send()
+        .await?;
 
-    let resp = extract_google_api_error(resp, || collection_id.to_owned())?;
+    let resp = extract_google_api_error_async(resp, || collection_id.to_owned()).await?;
 
-    let json: Option<Vec<dto::RunQueryResponse>> = resp.json()?;
+    let json: Option<Vec<dto::RunQueryResponse>> = resp.json().await?;
 
     Ok(Query(json.unwrap_or_default().into_iter()))
 }
@@ -86,6 +87,7 @@ pub fn query(
 ///
 /// Please note that this API acts as an iterator of same-like documents.
 /// This type is not suitable if you want to list documents of different types.
+#[derive(Debug)]
 pub struct Query(IntoIter<dto::RunQueryResponse>);
 
 impl Iterator for Query {

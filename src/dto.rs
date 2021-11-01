@@ -596,7 +596,7 @@ mod tests {
         "updateTime": "2020-04-28T14:52:51.250511Z"
         }"#;
         let document: Result<crate::dto::Document, serde_json::Error> = serde_json::from_str(&doc);
-        assert!(document.is_ok(), true);
+        assert!(document.is_ok());
     }
 
     #[test]
@@ -659,6 +659,6 @@ mod tests {
         "updateTime": "2020-04-28T14:52:51.250511Z"
         }"#;
         let document: Result<crate::dto::Document, serde_json::Error> = serde_json::from_str(&doc);
-        assert!(document.is_ok(), true);
+        assert!(document.is_ok());
     }
 }

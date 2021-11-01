@@ -4,7 +4,8 @@ use chrono::Duration;
 
 mod utils;
 
-fn main() -> Result<(), FirebaseError> {
+#[tokio::main]
+async fn main() -> Result<(), FirebaseError> {
     // Search for a credentials file in the root directory
     use std::path::PathBuf;
 
@@ -13,13 +14,15 @@ fn main() -> Result<(), FirebaseError> {
     let mut cred = Credentials::from_file(credential_file.to_str().unwrap())?;
 
     // Only download the public keys once, and cache them.
-    let jwkset = utils::from_cache_file(credential_file.with_file_name("cached_jwks.jwks").as_path(), &cred)?;
+    let jwkset = utils::from_cache_file(
+        credential_file.with_file_name("cached_jwks.jwks").as_path(), &cred
+    ).await?;
     cred.add_jwks_public_keys(&jwkset);
     cred.verify()?;
 
-    let user_session = utils::user_session_with_cached_refresh_token(&cred)?;
+    let user_session = utils::user_session_with_cached_refresh_token(&cred).await?;
 
-    let cookie = session_cookie::create(&cred, user_session.access_token(), Duration::seconds(3600))?;
+    let cookie = session_cookie::create(&cred, user_session.access_token().await, Duration::seconds(3600))?;
     println!("Created session cookie: {}", cookie);
 
     Ok(())
