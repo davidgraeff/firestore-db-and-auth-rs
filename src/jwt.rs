@@ -209,7 +209,6 @@ pub(crate) fn verify_access_token(
         .key_id
         .as_ref()
         .ok_or(FirebaseError::Generic("No jwt kid"))?;
-    println!("kid: {}", kid);
     let secret = credentials
         .decode_secret(kid)
         .ok_or(FirebaseError::Generic("No secret for kid"))?;

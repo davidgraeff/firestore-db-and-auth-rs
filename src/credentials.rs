@@ -171,7 +171,6 @@ impl Credentials {
             None,
             JWT_AUDIENCE_IDENTITY,
         )?;
-        println!("Access token: {:?}", access_token);
         verify_access_token(&self, &access_token)?;
         Ok(())
     }
