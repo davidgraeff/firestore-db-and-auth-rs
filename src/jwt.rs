@@ -69,32 +69,20 @@ pub async fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
     Ok(resp.text().await?)
 }
 
-/// Download the Google JWK Set for a given service account.
-/// The resulting set of JWKs need to be added to a credentials object
-/// for jwk verifications.
-#[cfg(feature = "unstable")]
-pub async fn download_google_jwks_async(account_mail: &str) -> Result<String, Error> {
-    let resp = reqwest::Client::new()
-        .get(&format!(
-            "https://www.googleapis.com/service_accounts/v1/jwk/{}",
-            account_mail
-        ))
-        .send()
-        .await?;
-    Ok(resp.text().await?)
-}
-
-pub(crate) fn create_jwt_encoded<S: AsRef<str>>(
+pub(crate) async fn create_jwt_encoded<S: AsRef<str>>(
     credentials: &Credentials,
-    scope: Option<Iter<S>>,
+    scope: Option<Iter<'_, S>>,
     duration: chrono::Duration,
     client_id: Option<String>,
     user_id: Option<String>,
     audience: &str,
 ) -> Result<String, Error> {
     let jwt = create_jwt(credentials, scope, duration, client_id, user_id, audience)?;
-    let secret = credentials
+    let secret_lock = credentials
         .keys
+        .lock()
+        .await;
+    let secret = secret_lock
         .secret
         .as_ref()
         .ok_or(Error::Generic("No private key added via add_keypair_key!"))?;
@@ -182,6 +170,7 @@ where
     Ok(JWT::new_decoded(header, expected_claims))
 }
 
+#[derive(Debug)]
 pub struct TokenValidationResult {
     pub claims: JwtOAuthPrivateClaims,
     pub audience: String,
@@ -197,7 +186,7 @@ impl TokenValidationResult {
     }
 }
 
-pub(crate) fn verify_access_token(
+pub(crate) async fn verify_access_token(
     credentials: &Credentials,
     access_token: &str,
 ) -> Result<TokenValidationResult, Error> {
@@ -211,6 +200,7 @@ pub(crate) fn verify_access_token(
         .ok_or(FirebaseError::Generic("No jwt kid"))?;
     let secret = credentials
         .decode_secret(kid)
+        .await?
         .ok_or(FirebaseError::Generic("No secret for kid"))?;
 
     let token = token.into_decoded(&secret.deref(), SignatureAlgorithm::RS256)?;
@@ -250,7 +240,7 @@ pub mod session_cookie {
     use super::*;
     use std::ops::Add;
 
-    pub(crate) fn create_jwt_encoded(credentials: &Credentials, duration: chrono::Duration) -> Result<String, Error> {
+    pub(crate) async fn create_jwt_encoded(credentials: &Credentials, duration: chrono::Duration) -> Result<String, Error> {
         let scope = [
             "https://www.googleapis.com/auth/cloud-platform",
             "https://www.googleapis.com/auth/firebase.database",
@@ -288,8 +278,11 @@ pub mod session_cookie {
         };
         let jwt = JWT::new_decoded(header, expected_claims);
 
-        let secret = credentials
+        let secret_lock = credentials
             .keys
+            .lock()
+            .await;
+        let secret = secret_lock
             .secret
             .as_ref()
             .ok_or(Error::Generic("No private key added via add_keypair_key!"))?;

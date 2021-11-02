@@ -196,7 +196,7 @@ pub mod user {
         ) -> Result<Session, FirebaseError> {
             // Check if current tokenid is still valid
             if let Some(firebase_tokenid) = firebase_tokenid {
-                let r = Session::by_access_token(credentials, firebase_tokenid);
+                let r = Session::by_access_token(credentials, firebase_tokenid).await;
                 if r.is_ok() {
                     let mut r = r.unwrap();
                     r.refresh_token = refresh_token.and_then(|f| Some(f.to_owned()));
@@ -267,8 +267,11 @@ pub mod user {
                 Some(user_id.to_owned()),
                 JWT_AUDIENCE_IDENTITY,
             )?;
-            let secret = credentials
+            let secret_lock = credentials
                 .keys
+                .lock()
+                .await;
+            let secret = secret_lock
                 .secret
                 .as_ref()
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
@@ -304,8 +307,8 @@ pub mod user {
         /// - `credentials` The credentials
         /// - `access_token` An access token, sometimes called a firebase id token.
         ///
-        pub fn by_access_token(credentials: &Credentials, access_token: &str) -> Result<Session, FirebaseError> {
-            let result = verify_access_token(&credentials, access_token)?;
+        pub async fn by_access_token(credentials: &Credentials, access_token: &str) -> Result<Session, FirebaseError> {
+            let result = verify_access_token(&credentials, access_token).await?;
             Ok(Session {
                 user_id: result.subject,
                 project_id_: result.audience,
@@ -425,13 +428,13 @@ pub mod session_cookie {
     /// - `id_token` An access token, sometimes called a firebase id token.
     /// - `duration` The cookie duration
     ///
-    pub fn create(
+    pub async fn create(
         credentials: &credentials::Credentials,
         id_token: String,
         duration: chrono::Duration,
     ) -> Result<String, FirebaseError> {
         // Generate the assertion from the admin credentials
-        let assertion = crate::jwt::session_cookie::create_jwt_encoded(credentials, duration)?;
+        let assertion = crate::jwt::session_cookie::create_jwt_encoded(credentials, duration).await?;
 
         // Request Google Oauth2 to retrieve the access token in order to create a session cookie
         let client = reqwest::blocking::Client::new();
@@ -462,6 +465,8 @@ pub mod session_cookie {
 
 /// Find the service account session defined in here
 pub mod service_account {
+    use crate::jwt::TokenValidationResult;
+
     use super::*;
     use credentials::Credentials;
 
@@ -496,7 +501,10 @@ pub mod service_account {
                 let mut jwt = self.jwt.write().await;
 
                 if jwt_update_expiry_if(&mut jwt, 50) {
-                    self.credentials.keys.secret
+                    self.credentials.keys
+                        .lock()
+                        .await
+                        .secret
                         .as_ref()
                         .and_then(|secret| jwt.clone().encode(&secret.deref()).ok())
                 } else {
@@ -532,7 +540,7 @@ pub mod service_account {
         /// as bearer token.
         ///
         /// See https://developers.google.com/identity/protocols/OAuth2ServiceAccount
-        pub fn new(credentials: Credentials) -> Result<Session, FirebaseError> {
+        pub async fn new(credentials: Credentials) -> Result<Session, FirebaseError> {
             let scope: Option<Iter<String>> = None;
             let jwt = create_jwt(
                 &credentials,
@@ -542,12 +550,17 @@ pub mod service_account {
                 None,
                 JWT_AUDIENCE_FIRESTORE,
             )?;
-            let secret = credentials
-                .keys
-                .secret
-                .as_ref()
-                .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
-            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
+            let encoded = {
+                let secret_lock = credentials
+                    .keys
+                    .lock()
+                    .await;
+                let secret = secret_lock
+                    .secret
+                    .as_ref()
+                    .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
+                jwt.encode(&secret.deref())?.encoded()?.encode()
+            };
 
             Ok(Session {
                 access_token_: Arc::new(RwLock::new(encoded)),
@@ -556,6 +569,10 @@ pub mod service_account {
                 credentials,
                 client: reqwest::Client::new(),
             })
+        }
+
+        pub async fn verify_token(&self, token: &str) -> Result<TokenValidationResult, FirebaseError> {
+            self.credentials.verify_token(token).await
         }
     }
 }
