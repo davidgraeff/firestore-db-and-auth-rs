@@ -191,7 +191,7 @@ impl Credentials {
         let should_refresh = {
             let keys = self.keys.lock().await;
             keys.pub_key_expires_at.map(|expires_at| {
-                expires_at - offset::Utc::now() < Duration::minutes(1)
+                expires_at - offset::Utc::now() < Duration::minutes(10)
             }).unwrap_or(false)
         };
 
@@ -236,13 +236,22 @@ impl Credentials {
         let mut keys = self.keys.lock().await;
         keys.pub_key = BTreeMap::new();
 
-        let jwks = download_google_jwks(&self.client_email).await?;
+        let (jwks, max_age_client) = download_google_jwks(&self.client_email).await?;
         Credentials::add_jwks_public_keys(&mut keys, &JWKSet::new(&jwks)?).await;
-        let jwks = download_google_jwks("securetoken@system.gserviceaccount.com").await?;
+        let (jwks, max_age_public) = download_google_jwks("securetoken@system.gserviceaccount.com").await?;
         Credentials::add_jwks_public_keys(&mut keys, &JWKSet::new(&jwks)?).await;
 
-        keys.pub_key_expires_at = Some(offset::Utc::now() + Duration::minutes(10));
+        let default_expiration = Duration::hours(2);
+        let max_age_client = max_age_client.unwrap_or(default_expiration);
+        let max_age_public = max_age_public.unwrap_or(default_expiration);
 
+        let expires_at = if max_age_client < max_age_public {
+            max_age_client
+        } else {
+            max_age_public
+        };
+
+        keys.pub_key_expires_at = Some(offset::Utc::now() + expires_at);
         Ok(())
     }
     /// Compute the Rsa keypair by using the private_key of the credentials file.

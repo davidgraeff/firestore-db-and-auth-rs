@@ -13,6 +13,7 @@ use crate::errors::FirebaseError;
 use biscuit::jwa::SignatureAlgorithm;
 use biscuit::{ClaimPresenceOptions, SingleOrMultiple, ValidationOptions};
 use std::ops::Deref;
+use cache_control::CacheControl;
 
 type Error = super::errors::FirebaseError;
 
@@ -63,10 +64,17 @@ impl JWKSet {
 /// Download the Google JWK Set for a given service account.
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
-pub async fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
+pub async fn download_google_jwks(account_mail: &str) -> Result<(String, Option<Duration>), Error> {
     let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
     let resp = reqwest::Client::new().get(&url).send().await?;
-    Ok(resp.text().await?)
+    let max_age = resp.headers()
+        .get("cache-control")
+        .and_then(|cache_control| cache_control.to_str().ok())
+        .and_then(|cache_control| CacheControl::from_value(cache_control))
+        .and_then(|cache_control| cache_control.max_age)
+        .and_then(|max_age| Duration::from_std(max_age).ok());
+
+    Ok((resp.text().await?, max_age))
 }
 
 pub(crate) async fn create_jwt_encoded<S: AsRef<str>>(

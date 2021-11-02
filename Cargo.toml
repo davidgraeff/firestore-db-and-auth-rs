@@ -12,6 +12,7 @@ maintenance = { status = "passively-maintained" }
 repository = "https://github.com/davidgraeff/firestore-db-and-auth-rs"
 
 [dependencies]
+cache_control = "0.2"
 reqwest = { version = "0.11", default-features = false, features = ["json", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -23,6 +24,7 @@ async-trait = "0.1"
 tokio = { version = "1.13", features = ["macros"] }
 futures = "0.3"
 pin-project = "1.0"
+http = "0.2"
 
 [dependencies.rocket]
 version = "0.4.6"
