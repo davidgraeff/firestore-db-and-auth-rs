@@ -8,7 +8,7 @@ use serde_json;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSet, JWT_AUDIENCE_IDENTITY};
 use crate::{errors::FirebaseError, jwt::TokenValidationResult};
@@ -44,7 +44,7 @@ pub struct Credentials {
     pub client_id: String,
     pub api_key: String,
     #[serde(default, skip)]
-    pub(crate) keys: Arc<Mutex<Keys>>,
+    pub(crate) keys: Arc<RwLock<Keys>>,
 }
 
 /// Converts a PEM (ascii base64) encoded private key into the binary der representation
@@ -133,7 +133,7 @@ impl Credentials {
     /// This is a convenience method, you may also just use [`Credentials::add_jwks_public_keys`].
     pub async fn with_jwkset(self, jwks: &JWKSet) -> Result<Credentials, Error> {
         {
-            let mut keys = self.keys.lock().await;
+            let mut keys = self.keys.write().await;
             Credentials::add_jwks_public_keys(&mut keys, jwks).await;
         }
 
@@ -189,7 +189,7 @@ impl Credentials {
     /// Used for jws validation
     pub async fn decode_secret(&self, kid: &str) -> Result<Option<Arc<biscuit::jws::Secret>>, Error> {
         let should_refresh = {
-            let keys = self.keys.lock().await;
+            let keys = self.keys.read().await;
             keys.pub_key_expires_at.map(|expires_at| {
                 expires_at - offset::Utc::now() < Duration::minutes(10)
             }).unwrap_or(false)
@@ -199,7 +199,7 @@ impl Credentials {
             self.download_google_jwks().await?;
         }
 
-        Ok(self.keys.lock().await.pub_key.get(kid).and_then(|f| Some(f.clone())))
+        Ok(self.keys.read().await.pub_key.get(kid).and_then(|f| Some(f.clone())))
     }
 
     /// Add a JSON Web Key Set (JWKS) to allow verification of Google access tokens.
@@ -233,7 +233,7 @@ impl Credentials {
     /// this method will download one for your google service account and one for the oauth related
     /// securetoken@system.gserviceaccount.com service account.
     pub async fn download_google_jwks(&self) -> Result<(), Error> {
-        let mut keys = self.keys.lock().await;
+        let mut keys = self.keys.write().await;
         keys.pub_key = BTreeMap::new();
 
         let (jwks, max_age_client) = download_google_jwks(&self.client_email).await?;
@@ -254,6 +254,7 @@ impl Credentials {
         keys.pub_key_expires_at = Some(offset::Utc::now() + expires_at);
         Ok(())
     }
+
     /// Compute the Rsa keypair by using the private_key of the credentials file.
     /// You must call this if you have manually created a credentials object.
     ///
@@ -264,7 +265,7 @@ impl Credentials {
 
         let vec = pem_to_der(&self.private_key)?;
         let key_pair = signature::RsaKeyPair::from_pkcs8(&vec)?;
-        self.keys.lock().await.secret = Some(Arc::new(Secret::RsaKeyPair(Arc::new(key_pair))));
+        self.keys.write().await.secret = Some(Arc::new(Secret::RsaKeyPair(Arc::new(key_pair))));
         Ok(())
     }
 }

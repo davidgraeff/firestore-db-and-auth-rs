@@ -88,7 +88,7 @@ pub(crate) async fn create_jwt_encoded<S: AsRef<str>>(
     let jwt = create_jwt(credentials, scope, duration, client_id, user_id, audience)?;
     let secret_lock = credentials
         .keys
-        .lock()
+        .read()
         .await;
     let secret = secret_lock
         .secret
@@ -288,7 +288,7 @@ pub mod session_cookie {
 
         let secret_lock = credentials
             .keys
-            .lock()
+            .read()
             .await;
         let secret = secret_lock
             .secret

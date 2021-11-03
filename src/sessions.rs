@@ -269,7 +269,7 @@ pub mod user {
             )?;
             let secret_lock = credentials
                 .keys
-                .lock()
+                .read()
                 .await;
             let secret = secret_lock
                 .secret
@@ -502,7 +502,7 @@ pub mod service_account {
 
                 if jwt_update_expiry_if(&mut jwt, 50) {
                     self.credentials.keys
-                        .lock()
+                        .read()
                         .await
                         .secret
                         .as_ref()
@@ -553,7 +553,7 @@ pub mod service_account {
             let encoded = {
                 let secret_lock = credentials
                     .keys
-                    .lock()
+                    .read()
                     .await;
                 let secret = secret_lock
                     .secret
