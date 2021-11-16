@@ -8,6 +8,7 @@ use serde_json;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::sync::Arc;
+use std::fmt;
 use tokio::sync::RwLock;
 
 use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSet, JWT_AUDIENCE_IDENTITY};
@@ -24,6 +25,16 @@ pub(crate) struct Keys {
     pub secret: Option<Arc<biscuit::jws::Secret>>,
 }
 
+impl fmt::Debug for Keys {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keys")
+         .field("pub_key_expires_at", &self.pub_key_expires_at)
+         .field("pub_key", &self.pub_key.keys().collect::<Vec<&String>>())
+         .field("secret", &self.secret.is_some())
+         .finish()
+    }
+}
+
 /// Service account credentials
 ///
 /// Especially the service account email is required to retrieve the public json web key set (jwks)
@@ -35,7 +46,7 @@ pub(crate) struct Keys {
 ///
 /// The private key is used for signing JWTs (javascript web token).
 /// A signed jwt, encoded as a base64 string, can be exchanged into a refresh and access token.
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Credentials {
     pub project_id: String,
     pub private_key_id: String,

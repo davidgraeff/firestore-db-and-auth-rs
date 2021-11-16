@@ -475,7 +475,7 @@ pub mod service_account {
     use std::ops::Deref;
 
     /// Service account session
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct Session {
         /// The google credentials
         pub credentials: Credentials,
