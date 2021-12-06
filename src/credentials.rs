@@ -262,6 +262,7 @@ impl Credentials {
             max_age_public
         };
 
+        println!("Google JWKs expires at: {:?}", expires_at);
         keys.pub_key_expires_at = Some(offset::Utc::now() + expires_at);
         Ok(())
     }

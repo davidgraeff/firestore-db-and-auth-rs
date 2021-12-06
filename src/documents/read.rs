@@ -12,8 +12,16 @@ where
     for<'b> T: Deserialize<'b>,
 {
     let resp = request_document(auth, document_name).await?;
-    // Here `resp.json()?` is a method provided by `reqwest`
-    let json: dto::Document = resp.json().await?;
+
+    // We take the raw response first in order to provide
+    // more complete errors on deserialization failure
+    let full = resp.bytes().await?;
+    let json = serde_json::from_slice(&full)
+        .map_err(|e| FirebaseError::SerdeVerbose {
+            input_doc: String::from_utf8_lossy(&full).to_string(),
+            ser: e
+        })?;
+
     Ok(document_to_pod(&json)?)
 }
 

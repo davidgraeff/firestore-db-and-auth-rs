@@ -40,6 +40,11 @@ pub enum FirebaseError {
         doc: Option<String>,
         ser: serde_json::Error,
     },
+    /// Verbose deserialization failure
+    SerdeVerbose {
+        input_doc: String,
+        ser: serde_json::Error,
+    },
     /// When the credentials.json file contains an invalid private key this error is returned
     RSA(ring::error::KeyRejected),
     /// Disk access errors
@@ -106,6 +111,9 @@ impl fmt::Display for FirebaseError {
                 } else {
                     ser.fmt(f)
                 }
+            },
+            FirebaseError::SerdeVerbose { ref input_doc, ref ser } => {
+                writeln!(f, "Serde deserialization failed with error '{}' on input: '{}'", ser, input_doc)
             }
         }
     }
@@ -123,6 +131,7 @@ impl error::Error for FirebaseError {
             FirebaseError::RSA(_) => None,
             FirebaseError::IO(ref e) => Some(e),
             FirebaseError::Ser { ref ser, .. } => Some(ser),
+            FirebaseError::SerdeVerbose { ref ser, .. } => Some(ser),
         }
     }
 }
