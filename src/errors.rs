@@ -107,7 +107,6 @@ impl fmt::Display for FirebaseError {
             FirebaseError::RSA(e) => e.fmt(f),
             FirebaseError::IO(e) => e.fmt(f),
             FirebaseError::Ser { doc, ser } => {
-                println!("Standard serde");
                 if let Some(doc) = doc {
                     writeln!(f, "{} in document {}", ser, doc)
                 } else {
@@ -115,7 +114,6 @@ impl fmt::Display for FirebaseError {
                 }
             },
             FirebaseError::SerdeVerbose { doc, input_doc, ser } => {
-                println!("Serde verbose");
                 let doc = doc.clone().unwrap_or("Unknown document".to_string());
                 writeln!(f, "Serde deserialization failed for document '{}' with error '{}' on input: '{}'",
                     doc, ser, input_doc)
