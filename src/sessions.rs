@@ -403,8 +403,6 @@ pub mod session_cookie {
     #[derive(Debug, Deserialize)]
     struct Oauth2ResponseDTO {
         access_token: String,
-        expires_in: u64,
-        token_type: String,
     }
 
     /// Firebase Auth provides server-side session cookie management for traditional websites that rely on session cookies.
