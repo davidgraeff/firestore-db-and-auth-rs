@@ -9,6 +9,7 @@ use futures::{
 };
 use core::pin::Pin;
 use std::boxed::Box;
+use bytes::Bytes;
 
 /// List all documents of a given collection.
 ///
@@ -93,7 +94,7 @@ where
             this.done = true;
         }
 
-        let result = document_to_pod(&doc);
+        let result = document_to_pod(&Bytes::new(), &doc);
         match result {
             Err(e) => Some((Err(e), this)),
             Ok(pod) => Some((Ok((

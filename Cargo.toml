@@ -12,6 +12,7 @@ maintenance = { status = "passively-maintained" }
 repository = "https://github.com/davidgraeff/firestore-db-and-auth-rs"
 
 [dependencies]
+bytes = "1.1"
 cache_control = "0.2"
 reqwest = { version = "0.11", default-features = false, features = ["json", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }

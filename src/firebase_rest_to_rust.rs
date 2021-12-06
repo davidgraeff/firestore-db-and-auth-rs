@@ -6,11 +6,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use bytes::Bytes;
 
 use super::dto;
 use super::errors::{FirebaseError, Result};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Wrapper {
     #[serde(flatten)]
     extra: HashMap<String, Value>,
@@ -116,7 +117,7 @@ pub(crate) fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value
 /// Internals:
 ///
 /// This method uses recursion to decode the given firebase type.
-pub fn document_to_pod<T>(document: &dto::Document) -> Result<T>
+pub fn document_to_pod<T>(input_doc: &Bytes, document: &dto::Document) -> Result<T>
 where
     for<'de> T: Deserialize<'de>,
 {
@@ -137,8 +138,9 @@ where
     };
 
     let v = serde_json::to_value(r)?;
-    let r: T = serde_json::from_value(v).map_err(|e| FirebaseError::Ser {
+    let r: T = serde_json::from_value(v).map_err(|e| FirebaseError::SerdeVerbose {
         doc: Some(document.name.clone()),
+        input_doc: format!("{:?}", input_doc),
         ser: e,
     })?;
     Ok(r)

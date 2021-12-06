@@ -7,7 +7,7 @@ use std::io::Read;
 /// ## Arguments
 /// * `auth` The authentication token
 /// * `document_name` The document path / collection and document id; For example `projects/my_project/databases/(default)/documents/tests/test`
-pub async fn read_by_name<T>(auth: &impl FirebaseAuthBearer, document_name: impl AsRef<str>) -> Result<T>
+pub async fn read_by_name<T>(auth: &impl FirebaseAuthBearer, document_name: &str) -> Result<T>
 where
     for<'b> T: Deserialize<'b>,
 {
@@ -18,11 +18,12 @@ where
     let full = resp.bytes().await?;
     let json = serde_json::from_slice(&full)
         .map_err(|e| FirebaseError::SerdeVerbose {
+            doc: Some(String::from(document_name)),
             input_doc: String::from_utf8_lossy(&full).to_string(),
             ser: e
         })?;
 
-    Ok(document_to_pod(&json)?)
+    Ok(document_to_pod(&full, &json)?)
 }
 
 
@@ -33,7 +34,7 @@ where
 /// * `auth` The authentication token
 /// * `path` The document path / collection; For example `my_collection` or `a/nested/collection`
 /// * `document_id` The document id. Make sure that you do not include the document id to the path argument.
-pub async fn read<T>(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsRef<str>) -> Result<T>
+pub async fn read<T>(auth: &impl FirebaseAuthBearer, path: &str, document_id: &str) -> Result<T>
 where
     for<'b> T: Deserialize<'b>,
 {
@@ -49,9 +50,9 @@ where
 /// Note that this leverages [`std::io::Read`](https://doc.rust-lang.org/std/io/trait.Read.html) and the `read_to_string()` method to chunk the
 /// response. This will raise `FirebaseError::IO` if there are errors reading the stream. Please
 /// see [`read_to_end()`](https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end)
-pub async fn contents(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsRef<str>) -> Result<String> {
+pub async fn contents(auth: &impl FirebaseAuthBearer, path: &str, document_id: &str) -> Result<String> {
     let document_name = document_name(&auth.project_id(), path, document_id);
-    let resp = request_document(auth, document_name).await?;
+    let resp = request_document(auth, &document_name).await?;
     resp.text().await
         .map_err(|e| FirebaseError::Request(e))
 }
@@ -60,7 +61,7 @@ pub async fn contents(auth: &impl FirebaseAuthBearer, path: &str, document_id: i
 /// Executes the request to retrieve the document. Returns the response from `reqwest`
 async fn request_document(
     auth: &impl FirebaseAuthBearer,
-    document_name: impl AsRef<str>,
+    document_name: &str,
 ) -> Result<reqwest::Response> {
     let url = firebase_url_base(document_name.as_ref());
 
@@ -71,16 +72,16 @@ async fn request_document(
         .send()
         .await?;
 
-    extract_google_api_error_async(resp, || document_name.as_ref().to_owned()).await
+    extract_google_api_error_async(resp, || document_name.to_owned()).await
 }
 
 /// Simple method to join the path and document identifier in correct format
-fn document_name(project_id: impl AsRef<str>, path: impl AsRef<str>, document_id: impl AsRef<str>) -> String {
+fn document_name(project_id: &str, path: &str, document_id: &str) -> String {
     format!(
         "projects/{}/databases/(default)/documents/{}/{}",
-        project_id.as_ref(),
-        path.as_ref(),
-        document_id.as_ref()
+        project_id,
+        path,
+        document_id
     )
 }
 
