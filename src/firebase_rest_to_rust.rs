@@ -140,7 +140,7 @@ where
     let v = serde_json::to_value(r)?;
     let r: T = serde_json::from_value(v).map_err(|e| FirebaseError::SerdeVerbose {
         doc: Some(document.name.clone()),
-        input_doc: String::from_utf8_lossy(input_doc).to_string(),
+        input_doc: String::from_utf8_lossy(input_doc).replace("\n", " ").to_string(),
         ser: e,
     })?;
     Ok(r)
