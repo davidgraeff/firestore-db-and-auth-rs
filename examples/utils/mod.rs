@@ -50,9 +50,9 @@ pub async fn from_cache_file(cache_file: &std::path::Path, c: &Credentials) -> e
     } else {
         // If not present, download the two jwks (specific service account + google system account),
         // merge them into one set of keys and store them in the cache file.
-        let mut jwks = JWKSet::new(&download_google_jwks(&c.client_email).await?)?;
+        let mut jwks = JWKSet::new(&download_google_jwks(&c.client_email).await?.0)?;
         jwks.keys
-            .append(&mut JWKSet::new(&download_google_jwks("securetoken@system.gserviceaccount.com").await?)?.keys);
+            .append(&mut JWKSet::new(&download_google_jwks("securetoken@system.gserviceaccount.com").await?.0)?.keys);
         let f = File::create(cache_file)?;
         serde_json::to_writer_pretty(f, &jwks)?;
         jwks

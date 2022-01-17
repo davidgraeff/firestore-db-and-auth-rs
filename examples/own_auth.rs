@@ -1,4 +1,3 @@
-use firestore_db_and_auth::errors::FirebaseError::APIError;
 use firestore_db_and_auth::{documents, errors, Credentials, FirebaseAuthBearer};
 
 /// Define your own structure that will implement the FirebaseAuthBearer trait
@@ -32,7 +31,7 @@ impl FirebaseAuthBearer for MyOwnSession {
 
 #[tokio::main]
 async fn main() -> errors::Result<()> {
-    let credentials = Credentials::from_file("firebase-service-account.json")?;
+    let credentials = Credentials::from_file("firebase-service-account.json").await?;
     #[derive(serde::Serialize)]
     struct TestData {
         an_int: u32,

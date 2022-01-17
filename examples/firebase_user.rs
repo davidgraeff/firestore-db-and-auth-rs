@@ -5,7 +5,7 @@ const TEST_USER_ID: &str = include_str!("test_user_id.txt");
 
 #[tokio::main]
 async fn main() -> errors::Result<()> {
-    let cred = Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
+    let cred = Credentials::from_file("firebase-service-account.json").await.expect("Read credentials file");
 
     let user_session = UserSession::by_user_id(
         &cred,

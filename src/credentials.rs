@@ -143,11 +143,7 @@ impl Credentials {
     /// This method will also verify that the given JWKs files allow verification of Google access tokens.
     /// This is a convenience method, you may also just use [`Credentials::add_jwks_public_keys`].
     pub async fn with_jwkset(self, jwks: &JWKSet) -> Result<Credentials, Error> {
-        {
-            let mut keys = self.keys.write().await;
-            Credentials::add_jwks_public_keys(&mut keys, jwks).await;
-        }
-
+        self.add_jwks_public_keys(jwks).await;
         self.verify().await?;
         Ok(self)
     }
@@ -227,7 +223,9 @@ impl Credentials {
     /// c.verify()?;
     /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
     /// ```
-    pub(crate) async fn add_jwks_public_keys(keys: &mut Keys, jwkset: &JWKSet) {
+    pub async fn add_jwks_public_keys(&self, jwkset: &JWKSet) {
+        let mut keys = self.keys.write().await;
+
         for entry in jwkset.keys.iter() {
             if !entry.headers.key_id.is_some() {
                 continue;
@@ -244,13 +242,15 @@ impl Credentials {
     /// this method will download one for your google service account and one for the oauth related
     /// securetoken@system.gserviceaccount.com service account.
     pub async fn download_google_jwks(&self) -> Result<(), Error> {
-        let mut keys = self.keys.write().await;
-        keys.pub_key = BTreeMap::new();
+        {
+            let mut keys = self.keys.write().await;
+            keys.pub_key = BTreeMap::new();
+        }
 
         let (jwks, max_age_client) = download_google_jwks(&self.client_email).await?;
-        Credentials::add_jwks_public_keys(&mut keys, &JWKSet::new(&jwks)?).await;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?).await;
         let (jwks, max_age_public) = download_google_jwks("securetoken@system.gserviceaccount.com").await?;
-        Credentials::add_jwks_public_keys(&mut keys, &JWKSet::new(&jwks)?).await;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?).await;
 
         let default_expiration = Duration::hours(2);
         let max_age_client = max_age_client.unwrap_or(default_expiration);
@@ -262,7 +262,11 @@ impl Credentials {
             max_age_public
         };
 
-        keys.pub_key_expires_at = Some(offset::Utc::now() + expires_at);
+        {
+            let mut keys = self.keys.write().await;
+            keys.pub_key_expires_at = Some(offset::Utc::now() + expires_at);
+        }
+
         Ok(())
     }
 

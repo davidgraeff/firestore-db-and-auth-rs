@@ -62,6 +62,7 @@ impl JWKSet {
 }
 
 /// Download the Google JWK Set for a given service account.
+/// Returns the JWKS alongside the maximum time the JWKS is valid for.
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
 pub async fn download_google_jwks(account_mail: &str) -> Result<(String, Option<Duration>), Error> {
