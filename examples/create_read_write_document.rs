@@ -194,7 +194,6 @@ async fn user_account_session(cred: Credentials) -> errors::Result<()> {
 
     let count = documents::query(&user_session, "tests", f.into(), dto::FieldOperator::EQUAL, "a_float")
     .await?;
-    println!("Count: {:?}", count);
 
     let count = count
     .count();
@@ -239,13 +238,9 @@ async fn valid_test_credentials() -> errors::Result<Credentials> {
     let mut cred: Credentials = Credentials::new(include_str!("../tests/service-account-test.json"))?;
 
     // Only download the public keys once, and cache them.
-    println!("1");
     let jwkset = utils::from_cache_file(jwks_path.as_path(), &cred).await?;
-    println!("2");
     cred.add_jwks_public_keys(&jwkset);
-    println!("3");
     cred.verify()?;
-    println!("4");
 
     Ok(cred)
 }
