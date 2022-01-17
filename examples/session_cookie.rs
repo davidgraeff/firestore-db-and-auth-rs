@@ -11,18 +11,22 @@ async fn main() -> Result<(), FirebaseError> {
 
     let mut credential_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     credential_file.push("firebase-service-account.json");
-    let mut cred = Credentials::from_file(credential_file.to_str().unwrap())?;
+    let cred = Credentials::from_file(credential_file.to_str().unwrap()).await?;
 
     // Only download the public keys once, and cache them.
     let jwkset = utils::from_cache_file(
         credential_file.with_file_name("cached_jwks.jwks").as_path(), &cred
     ).await?;
     cred.add_jwks_public_keys(&jwkset);
-    cred.verify()?;
+    cred.verify().await?;
 
     let user_session = utils::user_session_with_cached_refresh_token(&cred).await?;
 
-    let cookie = session_cookie::create(&cred, user_session.access_token().await, Duration::seconds(3600))?;
+    let cookie = session_cookie::create(
+        &cred,
+        user_session.access_token().await,
+        Duration::seconds(3600)
+    ).await?;
     println!("Created session cookie: {}", cookie);
 
     Ok(())
