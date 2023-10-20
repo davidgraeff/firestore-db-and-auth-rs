@@ -1,6 +1,3 @@
-#![cfg(feature = "external_doc")]
-#![cfg_attr(feature = "external_doc", doc = include_str!("../readme.md"))]
-
 pub mod credentials;
 pub mod documents;
 pub mod dto;
