@@ -18,7 +18,7 @@ pub enum FirebaseError {
     /// Generic errors are very rarely used and only used if no other error type matches
     Generic(&'static str),
     /// If the http status code is != 200 and no Google error response is attached
-    /// (see https://firebase.google.com/docs/reference/rest/auth#section-error-format)
+    /// (see <https://firebase.google.com/docs/reference/rest/auth#section-error-format>)
     /// then this error type will be returned
     UnexpectedResponse(&'static str, reqwest::StatusCode, String, String),
     /// An error returned by the Firestore API - Contains the numeric code, a string code and
@@ -158,7 +158,7 @@ struct GoogleRESTApiErrorWrapper {
 
 /// If the given reqwest response is status code 200, nothing happens
 /// Otherwise the response will be analysed if it contains a Google API Error response.
-/// See https://firebase.google.com/docs/reference/rest/auth#section-error-response
+/// See <https://firebase.google.com/docs/reference/rest/auth#section-error-response>
 ///
 /// Arguments:
 /// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case
@@ -180,7 +180,7 @@ pub(crate) fn extract_google_api_error(
 
 /// If the given reqwest response is status code 200, nothing happens
 /// Otherwise the response will be analysed if it contains a Google API Error response.
-/// See https://firebase.google.com/docs/reference/rest/auth#section-error-response
+/// See <https://firebase.google.com/docs/reference/rest/auth#section-error-response>
 ///
 /// Arguments:
 /// - response: The http requests response. Must be mutable, because the contained value will be extracted in an error case

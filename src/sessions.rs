@@ -36,7 +36,7 @@ pub mod user {
     }
 
     /// Default OAuth2 Providers supported by Firebase.
-    /// see: * https://firebase.google.com/docs/projects/provisioning/configure-oauth?hl=en#add-idp
+    /// see: * <https://firebase.google.com/docs/projects/provisioning/configure-oauth?hl=en#add-idp>
     pub enum OAuth2Provider {
         Apple,
         AppleGameCenter,
@@ -83,6 +83,7 @@ pub mod user {
         pub client_async: reqwest::Client,
     }
 
+    #[derive(Clone)]
     pub struct AsyncSession {
         /// The firebase auth user id
         pub user_id: String,
@@ -247,8 +248,8 @@ pub mod user {
         /// Async support: This is a blocking operation.
         ///
         /// See:
-        /// * https://firebase.google.com/docs/reference/rest/auth#section-refresh-token
-        /// * https://firebase.google.com/docs/auth/admin/create-custom-tokens#create_custom_tokens_using_a_third-party_jwt_library
+        /// * <https://firebase.google.com/docs/reference/rest/auth#section-refresh-token>
+        /// * <https://firebase.google.com/docs/auth/admin/create-custom-tokens#create_custom_tokens_using_a_third-party_jwt_library>
         pub fn new(
             credentials: &Credentials,
             user_id: Option<&str>,
@@ -438,8 +439,8 @@ pub mod user {
         /// THIS IS NON-BLOCKING
         ///
         /// See:
-        /// * https://firebase.google.com/docs/reference/rest/auth#section-refresh-token
-        /// * https://firebase.google.com/docs/auth/admin/create-custom-tokens#create_custom_tokens_using_a_third-party_jwt_library
+        /// * <https://firebase.google.com/docs/reference/rest/auth#section-refresh-token>
+        /// * <https://firebase.google.com/docs/auth/admin/create-custom-tokens#create_custom_tokens_using_a_third-party_jwt_library>
         pub async fn new(
             credentials: &Credentials,
             user_id: Option<&str>,
@@ -618,7 +619,7 @@ pub mod session_cookie {
 
     pub static GOOGLE_OAUTH2_URL: &str = "https://accounts.google.com/o/oauth2/token";
 
-    /// See https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects/createSessionCookie
+    /// See <https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects/createSessionCookie>
     #[inline]
     fn identitytoolkit_url(project_id: &str) -> String {
         format!(
@@ -627,14 +628,14 @@ pub mod session_cookie {
         )
     }
 
-    /// See https://cloud.google.com/identity-platform/docs/reference/rest/v1/CreateSessionCookieResponse
+    /// See <https://cloud.google.com/identity-platform/docs/reference/rest/v1/CreateSessionCookieResponse>
     #[derive(Debug, Deserialize)]
     struct CreateSessionCookieResponseDTO {
         #[serde(rename = "sessionCookie")]
         session_cookie_jwk: String,
     }
 
-    /// https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects/createSessionCookie
+    /// <https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects/createSessionCookie>
     #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
     struct SessionLoginDTO {
         /// Required. A valid Identity Platform ID token.
@@ -648,6 +649,7 @@ pub mod session_cookie {
         tenant_id: Option<String>,
     }
 
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct Oauth2ResponseDTO {
         access_token: String,
@@ -667,7 +669,7 @@ pub mod session_cookie {
     /// * Ability to revoke session cookies when token theft is suspected using the existing refresh token revocation API.
     /// * Ability to detect session revocation on major account changes.
     ///
-    /// See https://firebase.google.com/docs/auth/admin/manage-cookies
+    /// See <https://firebase.google.com/docs/auth/admin/manage-cookies>
     ///
     /// The generated session cookie is a JWT that includes the firebase user id in the "sub" (subject) field.
     ///
@@ -722,7 +724,7 @@ pub mod session_cookie {
     /// * Ability to revoke session cookies when token theft is suspected using the existing refresh token revocation API.
     /// * Ability to detect session revocation on major account changes.
     ///
-    /// See https://firebase.google.com/docs/auth/admin/manage-cookies
+    /// See <https://firebase.google.com/docs/auth/admin/manage-cookies>
     ///
     /// The generated session cookie is a JWT that includes the firebase user id in the "sub" (subject) field.
     ///
@@ -791,6 +793,7 @@ pub mod service_account {
         access_token_: RefCell<String>,
     }
 
+    #[derive(Clone)]
     pub struct AsyncSession {
         /// The google credentials
         pub credentials: Credentials,
@@ -876,7 +879,7 @@ pub mod service_account {
         /// A custom jwt is created and signed with the service account private key. This jwt is used
         /// as bearer token.
         ///
-        /// See https://developers.google.com/identity/protocols/OAuth2ServiceAccount
+        /// See <https://developers.google.com/identity/protocols/OAuth2ServiceAccount>
         pub fn new(credentials: Credentials) -> Result<BlockingSession, FirebaseError> {
             let scope: Option<Iter<String>> = None;
             let jwt = create_jwt(
@@ -913,7 +916,7 @@ pub mod service_account {
         /// A custom jwt is created and signed with the service account private key. This jwt is used
         /// as bearer token.
         ///
-        /// See https://developers.google.com/identity/protocols/OAuth2ServiceAccount
+        /// See <https://developers.google.com/identity/protocols/OAuth2ServiceAccount>
         pub fn new(credentials: Credentials) -> Result<AsyncSession, FirebaseError> {
             let scope: Option<Iter<String>> = None;
             let jwt = create_jwt(

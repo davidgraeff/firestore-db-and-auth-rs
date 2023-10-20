@@ -50,7 +50,8 @@ pub fn pem_to_der(pem_file_contents: &str) -> Result<Vec<u8>, Error> {
     use base64::decode;
 
     let pem_file_contents = pem_file_contents
-        .find("-----BEGIN").map(|i| &pem_file_contents[i + 10..])
+        .find("-----BEGIN")
+        .map(|i| &pem_file_contents[i + 10..])
         // Find the trailing ---- after BEGIN and cut that off
         .and_then(|str| str.find("-----").map(|i| &str[i + 5..]))
         // Cut off -----END
@@ -104,7 +105,7 @@ impl Credentials {
     /// ```
     ///
     /// You need two JWKS files for this crate to work:
-    /// * https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
+    /// * <https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com>
     /// * https://www.googleapis.com/service_accounts/v1/jwk/{your-service-account-email}
     pub fn new(credentials_file_content: &str) -> Result<Credentials, Error> {
         let mut credentials: Credentials = serde_json::from_str(credentials_file_content)?;

@@ -83,7 +83,7 @@ fn firebase_url(v1: &str, v2: &str) -> String {
 /// Converts an absolute path like "projects/{PROJECT_ID}/databases/(default)/documents/my_collection/document_id"
 /// into a relative document path like "my_collection/document_id"
 ///
-/// This is usually used to get a suitable path for [`delete`].
+/// This is usually used to get a suitable path for [`delete()`] or [`delete_async()`].
 pub fn abs_to_rel(path: &str) -> &str {
     &path[path.find("(default)").unwrap() + 20..]
 }

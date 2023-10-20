@@ -2,7 +2,7 @@
 //! In this module only those Data Transfer Objects (DTO) are defined, which are used by the firebase API
 //! to access, alter documents or firebase users.
 //!
-//! Domain specific DTOs for OAuth or session management are defined in [`crate::session`].
+//! Domain specific DTOs for OAuth or session management are defined in [`crate::sessions`].
 
 use std::collections::HashMap;
 
@@ -54,7 +54,7 @@ pub struct Write {
 #[derive(Default)]
 pub enum FieldOperator {
     #[default]
-    OPERATOR_UNSPECIFIED,  //	Unspecified. This value must not be used.
+    OPERATOR_UNSPECIFIED, //	Unspecified. This value must not be used.
     LESS_THAN,             //	Less than. Requires that the field come first in orderBy.
     LESS_THAN_OR_EQUAL,    //	Less than or equal. Requires that the field come first in orderBy.
     GREATER_THAN,          //	Greater than. Requires that the field come first in orderBy.
@@ -62,8 +62,6 @@ pub enum FieldOperator {
     EQUAL,                 //	Equal.
     ARRAY_CONTAINS,        //	Contains. Requires that the field is an array.
 }
-
-
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldFilter {

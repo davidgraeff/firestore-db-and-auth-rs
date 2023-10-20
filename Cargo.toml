@@ -20,7 +20,9 @@ biscuit = "0.5"
 ring = "0.16"
 base64 = "0.13"
 async-trait = "0.1.74"
-async-iterator = "2.2.0"
+futures-core = "0.3.28"
+async-stream = "0.3.5"
+futures-util = "0.3.28"
 
 [dependencies.rocket]
 version = "0.4.6"
@@ -32,13 +34,12 @@ optional = true
 features = ["external_doc", "rocket_support"]
 
 [features]
-default = ["rustls-tls", "unstable"]
+default = ["rustls-tls"]
 rocket_support = ["rocket"]
 rustls-tls = ["reqwest/rustls-tls"]
 default-tls = ["reqwest/default-tls"]
 native-tls = ["reqwest/native-tls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
-unstable = []
 external_doc = []
 
 [[example]]

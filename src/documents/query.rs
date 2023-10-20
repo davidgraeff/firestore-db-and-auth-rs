@@ -159,7 +159,7 @@ pub async fn query_async(
     Ok(Query(json.unwrap_or_default().into_iter()))
 }
 
-/// This type is returned as a result by [`query`].
+/// This type is returned as a result by [`query()`].
 /// Use it as an iterator. The query API returns a list of document references, not the documents itself.
 ///
 /// If you just need the meta data like the document name or update time, you are already settled.

@@ -48,7 +48,7 @@ impl JWKSet {
     /// Create a new JWKSetDTO instance from a given json string
     /// You can use [`Credentials::add_jwks_public_keys`] to manually add more public keys later on.
     /// You need two JWKS files for this crate to work:
-    /// * https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
+    /// * <https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com>
     /// * https://www.googleapis.com/service_accounts/v1/jwk/{your-service-account-email}
     pub fn new(jwk_content: &str) -> Result<JWKSet, Error> {
         let jwk_set: JWKSet = serde_json::from_str(jwk_content).map_err(|e| FirebaseError::Ser {
@@ -71,7 +71,6 @@ pub fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
 /// Download the Google JWK Set for a given service account.
 /// The resulting set of JWKs need to be added to a credentials object
 /// for jwk verifications.
-#[cfg(feature = "unstable")]
 pub async fn download_google_jwks_async(account_mail: &str) -> Result<String, Error> {
     let resp = reqwest::Client::new()
         .get(&format!(
@@ -166,10 +165,12 @@ where
             ..Default::default()
         },
         private: JwtOAuthPrivateClaims {
-            scope: scope.map(|f| f.fold(String::new(), |acc, x| {
+            scope: scope.map(|f| {
+                f.fold(String::new(), |acc, x| {
                     let x: &str = x.as_ref();
                     acc + x + " "
-                })),
+                })
+            }),
             client_id,
             uid: user_id,
         },
