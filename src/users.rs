@@ -72,7 +72,7 @@ pub fn user_info(session: &user::BlockingSession) -> Result<FirebaseAuthUserResp
 
     let resp = session
         .client()
-        .post(&url)
+        .post(url)
         .json(&UserRequest {
             idToken: session.access_token(),
         })
@@ -92,14 +92,14 @@ pub fn user_remove(session: &user::BlockingSession) -> Result<()> {
     let url = firebase_auth_url("delete", &session.api_key);
     let resp = session
         .client()
-        .post(&url)
+        .post(url)
         .json(&UserRequest {
             idToken: session.access_token(),
         })
         .send()?;
 
     extract_google_api_error(resp, || session.user_id.to_owned())?;
-    Ok({})
+    Ok(())
 }
 
 #[allow(non_snake_case)]
@@ -127,7 +127,7 @@ fn sign_up_in(
     let url = firebase_auth_url(action, &session.credentials.api_key);
     let resp = session
         .client()
-        .post(&url)
+        .post(url)
         .json(&SignInUpUserRequest {
             email: email.to_owned(),
             password: password.to_owned(),
@@ -139,12 +139,12 @@ fn sign_up_in(
 
     let resp: SignInUpUserResponse = resp.json()?;
 
-    Ok(user::BlockingSession::new(
+    user::BlockingSession::new(
         &session.credentials,
         Some(&resp.localId),
         Some(&resp.idToken),
         Some(&resp.refreshToken),
-    )?)
+    )
 }
 
 /// Creates the firebase auth user with the given email and password and returns
@@ -217,7 +217,7 @@ pub async fn async_user_remove(session: &mut user::AsyncSession) -> Result<()> {
         .await?;
 
     extract_google_api_error_async(resp, || session.user_id.to_owned()).await?;
-    Ok({})
+    Ok(())
 }
 
 async fn async_sign_up_in(
@@ -242,13 +242,13 @@ async fn async_sign_up_in(
 
     let resp: SignInUpUserResponse = resp.json().await?;
 
-    Ok(user::AsyncSession::new(
+    user::AsyncSession::new(
         &session.credentials,
         Some(&resp.localId),
         Some(&resp.idToken),
         Some(&resp.refreshToken),
     )
-    .await?)
+    .await
 }
 
 /// Creates the firebase auth user with the given email and password and returns

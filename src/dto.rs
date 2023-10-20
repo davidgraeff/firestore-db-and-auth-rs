@@ -51,7 +51,9 @@ pub struct Write {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
+#[derive(Default)]
 pub enum FieldOperator {
+    #[default]
     OPERATOR_UNSPECIFIED,  //	Unspecified. This value must not be used.
     LESS_THAN,             //	Less than. Requires that the field come first in orderBy.
     LESS_THAN_OR_EQUAL,    //	Less than or equal. Requires that the field come first in orderBy.
@@ -61,11 +63,7 @@ pub enum FieldOperator {
     ARRAY_CONTAINS,        //	Contains. Requires that the field is an array.
 }
 
-impl Default for FieldOperator {
-    fn default() -> Self {
-        FieldOperator::OPERATOR_UNSPECIFIED
-    }
-}
+
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldFilter {

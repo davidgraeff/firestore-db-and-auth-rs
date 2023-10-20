@@ -115,10 +115,8 @@ where
 
     let resp = extract_google_api_error(resp, || {
         document_id
-            .as_ref()
-            .and_then(|f| Some(f.as_ref().to_owned()))
-            .or(Some(String::new()))
-            .unwrap()
+            .as_ref().map(|f| f.as_ref().to_owned())
+            .unwrap_or_default()
     })?;
 
     let result_document: dto::Document = resp.json()?;
@@ -196,10 +194,8 @@ where
 
     let resp = extract_google_api_error_async(resp, || {
         document_id
-            .as_ref()
-            .and_then(|f| Some(f.as_ref().to_owned()))
-            .or(Some(String::new()))
-            .unwrap()
+            .as_ref().map(|f| f.as_ref().to_owned())
+            .unwrap_or_default()
     })
     .await?;
 

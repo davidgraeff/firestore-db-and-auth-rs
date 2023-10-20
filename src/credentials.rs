@@ -50,22 +50,20 @@ pub fn pem_to_der(pem_file_contents: &str) -> Result<Vec<u8>, Error> {
     use base64::decode;
 
     let pem_file_contents = pem_file_contents
-        .find("-----BEGIN")
-        // Cut off the first BEGIN part
-        .and_then(|i| Some(&pem_file_contents[i + 10..]))
+        .find("-----BEGIN").map(|i| &pem_file_contents[i + 10..])
         // Find the trailing ---- after BEGIN and cut that off
-        .and_then(|str| str.find("-----").and_then(|i| Some(&str[i + 5..])))
+        .and_then(|str| str.find("-----").map(|i| &str[i + 5..]))
         // Cut off -----END
-        .and_then(|str| str.rfind("-----END").and_then(|i| Some(&str[..i])));
+        .and_then(|str| str.rfind("-----END").map(|i| &str[..i]));
     if pem_file_contents.is_none() {
         return Err(FirebaseError::Generic(
             "Invalid private key in credentials file. Must be valid PEM.",
         ));
     }
 
-    let base64_body = pem_file_contents.unwrap().replace("\n", "");
-    Ok(decode(&base64_body)
-        .map_err(|_| FirebaseError::Generic("Invalid private key in credentials file. Expected Base64 data."))?)
+    let base64_body = pem_file_contents.unwrap().replace('\n', "");
+    decode(base64_body)
+        .map_err(|_| FirebaseError::Generic("Invalid private key in credentials file. Expected Base64 data."))
 }
 
 #[test]
@@ -187,21 +185,21 @@ impl Credentials {
     /// Returns an empty result type on success.
     pub fn verify(&self) -> Result<(), Error> {
         let access_token = create_jwt_encoded(
-            &self,
+            self,
             Some(["admin"].iter()),
             Duration::hours(1),
             Some(self.client_id.clone()),
             None,
             JWT_AUDIENCE_IDENTITY,
         )?;
-        verify_access_token(&self, &access_token)?;
+        verify_access_token(self, &access_token)?;
         Ok(())
     }
 
     /// Find the secret in the jwt set that matches the given key id, if any.
     /// Used for jws validation
     pub fn decode_secret(&self, kid: &str) -> Option<Arc<biscuit::jws::Secret>> {
-        self.keys.pub_key.get(kid).and_then(|f| Some(f.clone()))
+        self.keys.pub_key.get(kid).cloned()
     }
 
     /// Add a JSON Web Key Set (JWKS) to allow verification of Google access tokens.
@@ -220,7 +218,7 @@ impl Credentials {
     /// ```
     pub fn add_jwks_public_keys(&mut self, jwkset: &JWKSet) {
         for entry in jwkset.keys.iter() {
-            if !entry.headers.key_id.is_some() {
+            if entry.headers.key_id.is_none() {
                 continue;
             }
 

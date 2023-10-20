@@ -64,7 +64,7 @@ impl JWKSet {
 /// for jwk verifications.
 pub fn download_google_jwks(account_mail: &str) -> Result<String, Error> {
     let url = format!("https://www.googleapis.com/service_accounts/v1/jwk/{}", account_mail);
-    let resp = reqwest::blocking::Client::new().get(&url).send()?;
+    let resp = reqwest::blocking::Client::new().get(url).send()?;
     Ok(resp.text()?)
 }
 
@@ -97,17 +97,17 @@ pub(crate) fn create_jwt_encoded<S: AsRef<str>>(
         .secret
         .as_ref()
         .ok_or(Error::Generic("No private key added via add_keypair_key!"))?;
-    Ok(jwt.encode(&secret.deref())?.encoded()?.encode())
+    Ok(jwt.encode(secret.deref())?.encoded()?.encode())
 }
 
 /// Returns true if the access token (assumed to be a jwt) has expired
 ///
 /// An error is returned if the given access token string is not a jwt
 pub(crate) fn is_expired(access_token: &str, tolerance_in_minutes: i64) -> Result<bool, FirebaseError> {
-    let token = AuthClaimsJWT::new_encoded(&access_token);
+    let token = AuthClaimsJWT::new_encoded(access_token);
     let claims = token.unverified_payload()?;
     if let Some(expiry) = claims.registered.expiry.as_ref() {
-        let diff: Duration = Utc::now().signed_duration_since(expiry.deref().clone());
+        let diff: Duration = Utc::now().signed_duration_since(*expiry.deref());
         return Ok(diff.num_minutes() - tolerance_in_minutes > 0);
     }
 
@@ -116,11 +116,11 @@ pub(crate) fn is_expired(access_token: &str, tolerance_in_minutes: i64) -> Resul
 
 /// Returns true if the jwt was updated and needs signing
 pub(crate) fn jwt_update_expiry_if(jwt: &mut AuthClaimsJWT, expire_in_minutes: i64) -> bool {
-    let ref mut claims = jwt.payload_mut().unwrap().registered;
+    let claims = &mut jwt.payload_mut().unwrap().registered;
 
     let now = biscuit::Timestamp::from(Utc::now());
     if let Some(issued_at) = claims.issued_at.as_ref() {
-        let diff: Duration = Utc::now().signed_duration_since(issued_at.deref().clone());
+        let diff: Duration = Utc::now().signed_duration_since(*issued_at.deref());
         if diff.num_minutes() > expire_in_minutes {
             claims.issued_at = Some(now);
         } else {
@@ -166,12 +166,10 @@ where
             ..Default::default()
         },
         private: JwtOAuthPrivateClaims {
-            scope: scope.and_then(|f| {
-                Some(f.fold(String::new(), |acc, x| {
+            scope: scope.map(|f| f.fold(String::new(), |acc, x| {
                     let x: &str = x.as_ref();
-                    return acc + x + " ";
-                }))
-            }),
+                    acc + x + " "
+                })),
             client_id,
             uid: user_id,
         },
@@ -188,7 +186,7 @@ pub struct TokenValidationResult {
 impl TokenValidationResult {
     pub fn get_scopes(&self) -> HashSet<String> {
         match self.claims.scope {
-            Some(ref v) => v.split(" ").map(|f| f.to_owned()).collect(),
+            Some(ref v) => v.split(' ').map(|f| f.to_owned()).collect(),
             None => HashSet::new(),
         }
     }
@@ -198,7 +196,7 @@ pub(crate) fn verify_access_token(
     credentials: &Credentials,
     access_token: &str,
 ) -> Result<TokenValidationResult, Error> {
-    let token = AuthClaimsJWT::new_encoded(&access_token);
+    let token = AuthClaimsJWT::new_encoded(access_token);
 
     let header = token.unverified_header()?;
     let kid = header
@@ -210,7 +208,7 @@ pub(crate) fn verify_access_token(
         .decode_secret(kid)
         .ok_or(FirebaseError::Generic("No secret for kid"))?;
 
-    let token = token.into_decoded(&secret.deref(), SignatureAlgorithm::RS256)?;
+    let token = token.into_decoded(secret.deref(), SignatureAlgorithm::RS256)?;
 
     use biscuit::Presence::*;
 
@@ -290,6 +288,6 @@ pub mod session_cookie {
             .secret
             .as_ref()
             .ok_or(Error::Generic("No private key added via add_keypair_key!"))?;
-        Ok(jwt.encode(&secret.deref())?.encoded()?.encode())
+        Ok(jwt.encode(secret.deref())?.encoded()?.encode())
     }
 }

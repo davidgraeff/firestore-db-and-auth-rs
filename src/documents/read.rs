@@ -16,7 +16,7 @@ where
     let resp = request_document(auth, document_name)?;
     // Here `resp.json()?` is a method provided by `reqwest`
     let json: dto::Document = resp.json()?;
-    Ok(document_to_pod(&json)?)
+    document_to_pod(&json)
 }
 
 ///
@@ -32,7 +32,7 @@ where
     let resp = request_document_async(auth, document_name).await?;
     // Here `resp.json()?` is a method provided by `reqwest`
     let json: dto::Document = resp.json().await?;
-    Ok(document_to_pod(&json)?)
+    document_to_pod(&json)
 }
 
 ///
@@ -46,8 +46,8 @@ pub fn read<T>(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsR
 where
     for<'b> T: Deserialize<'b>,
 {
-    let document_name = document_name(&auth.project_id(), path, document_id);
-    read_by_name(auth, &document_name)
+    let document_name = document_name(auth.project_id(), path, document_id);
+    read_by_name(auth, document_name)
 }
 
 /// Return the raw unparsed content of the Firestore document. Methods like
@@ -58,7 +58,7 @@ where
 /// response. This will raise `FirebaseError::IO` if there are errors reading the stream. Please
 /// see [`read_to_end()`](https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end)
 pub fn contents(auth: &impl FirebaseAuthBearer, path: &str, document_id: impl AsRef<str>) -> Result<String> {
-    let document_name = document_name(&auth.project_id(), path, document_id);
+    let document_name = document_name(auth.project_id(), path, document_id);
     let mut resp = request_document(auth, document_name)?;
     let mut text = String::new();
     match resp.read_to_string(&mut text) {
@@ -82,7 +82,7 @@ pub async fn read_async<T>(
 where
     for<'b> T: Deserialize<'b>,
 {
-    let document_name = document_name(&auth.project_id(), path, document_id);
+    let document_name = document_name(auth.project_id(), path, document_id);
     read_by_name_async(auth, &document_name).await
 }
 
@@ -98,14 +98,14 @@ pub async fn contents_async(
     path: &str,
     document_id: impl AsRef<str>,
 ) -> Result<String> {
-    let document_name = document_name(&auth.project_id(), path, document_id);
+    let document_name = document_name(auth.project_id(), path, document_id);
     let resp = request_document_async(auth, document_name).await?;
     let mut text = String::new();
     let byte = match resp.bytes().await {
         Ok(_bytes) => _bytes,
         Err(e) => return Err(FirebaseError::Request(e)),
     };
-    match std::str::from_utf8(&byte.to_vec()) {
+    match std::str::from_utf8(&byte) {
         Ok(byte_str) => {
             text.push_str(byte_str);
         }
@@ -123,7 +123,7 @@ fn request_document(
 
     let resp = auth
         .client()
-        .get(&url)
+        .get(url)
         .bearer_auth(auth.access_token().to_owned())
         .send()?;
 

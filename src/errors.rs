@@ -123,7 +123,7 @@ impl fmt::Display for FirebaseError {
 impl error::Error for FirebaseError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
-            FirebaseError::Generic(ref _m) => None,
+            FirebaseError::Generic(_m) => None,
             FirebaseError::UnexpectedResponse(_, _, _, _) => None,
             FirebaseError::APIError(_, _, _) => None,
             FirebaseError::Request(ref e) => Some(e),
@@ -172,7 +172,7 @@ pub(crate) fn extract_google_api_error(
     }
 
     Err(extract_google_api_error_intern(
-        response.status().clone(),
+        response.status(),
         response.text()?,
         context,
     ))
@@ -194,7 +194,7 @@ pub(crate) async fn extract_google_api_error_async(
     }
 
     Err(extract_google_api_error_intern(
-        response.status().clone(),
+        response.status(),
         response.text().await?,
         context,
     ))

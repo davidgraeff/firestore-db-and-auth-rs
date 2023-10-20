@@ -68,7 +68,7 @@ pub fn query(
 
     let resp = auth
         .client()
-        .post(&url)
+        .post(url)
         .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
         .send()?;
@@ -174,11 +174,11 @@ impl Iterator for Query {
 
     // Skip empty entries
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(r) = self.0.next() {
+        for r in self.0.by_ref() {
             if let Some(document) = r.document {
                 return Some(document);
             }
         }
-        return None;
+        None
     }
 }

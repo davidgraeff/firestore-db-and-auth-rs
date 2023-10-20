@@ -39,7 +39,7 @@ pub(crate) fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value
         let mut map: Map<String, serde_json::value::Value> = Map::new();
         if let Some(map_fields) = &map_value.fields {
             for (map_key, map_v) in map_fields {
-                map.insert(map_key.clone(), firebase_value_to_serde_value(&map_v));
+                map.insert(map_key.clone(), firebase_value_to_serde_value(map_v));
             }
         }
         return Value::Object(map);
@@ -51,7 +51,7 @@ pub(crate) fn firebase_value_to_serde_value(v: &dto::Value) -> serde_json::Value
         let mut vec: Vec<Value> = Vec::new();
         if let Some(values) = &array_value.values {
             for k in values {
-                vec.push(firebase_value_to_serde_value(&k));
+                vec.push(firebase_value_to_serde_value(k));
             }
         }
         return Value::Array(vec);
@@ -79,7 +79,7 @@ pub(crate) fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value
     } else if let Some(map_value) = v.as_object() {
         let mut map: HashMap<String, dto::Value> = HashMap::new();
         for (map_key, map_v) in map_value {
-            map.insert(map_key.to_owned(), serde_value_to_firebase_value(&map_v));
+            map.insert(map_key.to_owned(), serde_value_to_firebase_value(map_v));
         }
         return dto::Value {
             map_value: Some(dto::MapValue { fields: Some(map) }),
@@ -98,7 +98,7 @@ pub(crate) fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value
     } else if let Some(array_value) = v.as_array() {
         let mut vec: Vec<dto::Value> = Vec::new();
         for k in array_value {
-            vec.push(serde_value_to_firebase_value(&k));
+            vec.push(serde_value_to_firebase_value(k));
         }
         return dto::Value {
             array_value: Some(dto::ArrayValue { values: Some(vec) }),
@@ -131,7 +131,7 @@ where
             .unwrap()
             .iter()
             .map(|(k, v)| {
-                return (k.to_owned(), firebase_value_to_serde_value(&v));
+                (k.to_owned(), firebase_value_to_serde_value(v))
             })
             .collect(),
     };

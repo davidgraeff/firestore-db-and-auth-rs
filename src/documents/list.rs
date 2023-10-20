@@ -71,10 +71,10 @@ where
 }
 
 #[inline]
-fn get_new_data<'a>(
+fn get_new_data(
     collection_id: &str,
     url: &str,
-    auth: &'a impl FirebaseAuthBearer,
+    auth: &impl FirebaseAuthBearer,
 ) -> Result<dto::ListDocumentsResponse> {
     let resp = auth
         .client()
@@ -181,7 +181,7 @@ where
             self.done = true;
         }
 
-        let result = document_to_pod(&doc);
+        let result = document_to_pod(doc);
         match result {
             Err(e) => Some(Err(e)),
             Ok(pod) => Some(Ok((
@@ -239,7 +239,7 @@ where
             self.done = true;
         }
 
-        let result = document_to_pod(&doc);
+        let result = document_to_pod(doc);
         match result {
             Err(e) => Some(Err(e)),
             Ok(pod) => Some(Ok((

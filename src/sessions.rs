@@ -91,7 +91,7 @@ pub mod user {
         pub refresh_token: Option<String>,
         /// The firebase projects API key, as defined in the credentials object
         pub api_key: String,
-        access_token_: Pin<Box<String>>,
+        access_token_: String,
         project_id_: String,
         /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
         pub client_async: reqwest::Client,
@@ -109,7 +109,7 @@ pub mod user {
             let jwt = self.access_token_.borrow();
             let jwt = jwt.as_str();
 
-            if is_expired(&jwt, 0).unwrap() {
+            if is_expired(jwt, 0).unwrap() {
                 // Unwrap: the token is always valid at this point
                 if let Ok(response) = get_new_access_token(&self.api_key, jwt) {
                     self.access_token_.swap(&RefCell::new(response.id_token.clone()));
@@ -148,10 +148,10 @@ pub mod user {
             let jwt = &self.access_token_;
             let jwt = jwt.as_str();
 
-            if is_expired(&jwt, 0).unwrap() {
+            if is_expired(jwt, 0).unwrap() {
                 // Unwrap: the token is always valid at this point
                 if let Ok(response) = get_new_access_token_async(&self.api_key, jwt).await {
-                    self.access_token_ = Pin::new(Box::new(response.id_token.clone()));
+                    self.access_token_ = response.id_token.clone();
                     return response.id_token;
                 } else {
                     // Failed to refresh access token. Return an empty string
@@ -180,7 +180,7 @@ pub mod user {
 
         let url = refresh_to_access_endpoint(api_key);
         let client = reqwest::blocking::Client::new();
-        let response = client.post(&url).form(&request_body).send()?;
+        let response = client.post(url).form(&request_body).send()?;
         Ok(response.json()?)
     }
 
@@ -260,7 +260,7 @@ pub mod user {
                 let r = BlockingSession::by_access_token(credentials, firebase_tokenid);
                 if r.is_ok() {
                     let mut r = r.unwrap();
-                    r.refresh_token = refresh_token.and_then(|f| Some(f.to_owned()));
+                    r.refresh_token = refresh_token.map(|f| f.to_owned());
                     return Ok(r);
                 }
             }
@@ -324,7 +324,7 @@ pub mod user {
         ) -> Result<BlockingSession, FirebaseError> {
             let scope: Option<Iter<String>> = None;
             let jwt = create_jwt(
-                &credentials,
+                credentials,
                 scope,
                 Duration::hours(1),
                 None,
@@ -336,10 +336,10 @@ pub mod user {
                 .secret
                 .as_ref()
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
-            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
+            let encoded = jwt.encode(secret.deref())?.encoded()?.encode();
 
             let resp = reqwest::blocking::Client::new()
-                .post(&token_endpoint(&credentials.api_key))
+                .post(token_endpoint(&credentials.api_key))
                 .json(&CustomJwtToFirebaseID::new(encoded, with_refresh_token))
                 .send()?;
             let resp = extract_google_api_error(resp, || user_id.to_owned())?;
@@ -371,7 +371,7 @@ pub mod user {
             credentials: &Credentials,
             access_token: &str,
         ) -> Result<BlockingSession, FirebaseError> {
-            let result = verify_access_token(&credentials, access_token)?;
+            let result = verify_access_token(credentials, access_token)?;
             Ok(BlockingSession {
                 user_id: result.subject,
                 project_id_: result.audience,
@@ -416,11 +416,11 @@ pub mod user {
                 return_secure_token,
             };
 
-            let response = reqwest::blocking::Client::new().post(&uri).json(&json).send()?;
+            let response = reqwest::blocking::Client::new().post(uri).json(&json).send()?;
 
             let oauth_response: OAuthResponse = response.json()?;
 
-            self::BlockingSession::by_user_id(&credentials, &oauth_response.local_id, with_refresh_token)
+            self::BlockingSession::by_user_id(credentials, &oauth_response.local_id, with_refresh_token)
         }
     }
 
@@ -451,7 +451,7 @@ pub mod user {
                 let r = AsyncSession::by_access_token(credentials, firebase_tokenid);
                 if r.is_ok() {
                     let mut r = r.unwrap();
-                    r.refresh_token = refresh_token.and_then(|f| Some(f.to_owned()));
+                    r.refresh_token = refresh_token.map(|f| f.to_owned());
                     return Ok(r);
                 }
             }
@@ -491,7 +491,7 @@ pub mod user {
                 get_new_access_token_async(&credentials.api_key, refresh_token).await?;
             Ok(AsyncSession {
                 user_id: r.user_id,
-                access_token_: Pin::new(Box::new(r.id_token)),
+                access_token_: r.id_token,
                 refresh_token: Some(r.refresh_token),
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
@@ -516,7 +516,7 @@ pub mod user {
         ) -> Result<AsyncSession, FirebaseError> {
             let scope: Option<Iter<String>> = None;
             let jwt = create_jwt(
-                &credentials,
+                credentials,
                 scope,
                 Duration::hours(1),
                 None,
@@ -528,7 +528,7 @@ pub mod user {
                 .secret
                 .as_ref()
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
-            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
+            let encoded = jwt.encode(secret.deref())?.encoded()?.encode();
 
             let resp = reqwest::Client::new()
                 .post(&token_endpoint(&credentials.api_key))
@@ -540,7 +540,7 @@ pub mod user {
 
             Ok(AsyncSession {
                 user_id: user_id.to_owned(),
-                access_token_: Pin::new(Box::new(r.idToken)),
+                access_token_: r.idToken,
                 refresh_token: r.refreshToken,
                 project_id_: credentials.project_id.to_owned(),
                 api_key: credentials.api_key.clone(),
@@ -560,11 +560,11 @@ pub mod user {
         /// - `access_token` An access token, sometimes called a firebase id token.
         ///
         pub fn by_access_token(credentials: &Credentials, access_token: &str) -> Result<AsyncSession, FirebaseError> {
-            let result = verify_access_token(&credentials, access_token)?;
+            let result = verify_access_token(credentials, access_token)?;
             Ok(AsyncSession {
                 user_id: result.subject,
                 project_id_: result.audience,
-                access_token_: Pin::new(Box::new(access_token.to_owned())),
+                access_token_: access_token.to_owned(),
                 refresh_token: None,
                 api_key: credentials.api_key.clone(),
                 client_async: reqwest::Client::new(),
@@ -608,7 +608,7 @@ pub mod user {
 
             let oauth_response: OAuthResponse = response.json().await?;
 
-            self::AsyncSession::by_user_id(&credentials, &oauth_response.local_id, with_refresh_token).await
+            self::AsyncSession::by_user_id(credentials, &oauth_response.local_id, with_refresh_token).await
         }
     }
 }
@@ -697,8 +697,8 @@ pub mod session_cookie {
 
         // Create a session cookie with the access token previously retrieved
         let response_session_cookie_json: CreateSessionCookieResponseDTO = client
-            .post(&identitytoolkit_url(&credentials.project_id))
-            .bearer_auth(&response_oauth2.access_token)
+            .post(identitytoolkit_url(&credentials.project_id))
+            .bearer_auth(response_oauth2.access_token)
             .json(&SessionLoginDTO {
                 id_token,
                 valid_duration: duration.num_seconds() as u64,
@@ -797,7 +797,7 @@ pub mod service_account {
         /// The http client for async operations. Replace or modify the client if you have special demands like proxy support
         pub client_async: reqwest::Client,
         jwt: Pin<Box<AuthClaimsJWT>>,
-        access_token_: Pin<Box<String>>,
+        access_token_: String,
     }
 
     impl super::FirebaseAuthBearer for BlockingSession {
@@ -811,7 +811,7 @@ pub mod service_account {
 
             if jwt_update_expiry_if(&mut jwt, 50) {
                 if let Some(secret) = self.credentials.keys.secret.as_ref() {
-                    if let Ok(v) = self.jwt.borrow().encode(&secret.deref()) {
+                    if let Ok(v) = self.jwt.borrow().encode(secret.deref()) {
                         if let Ok(v2) = v.encoded() {
                             self.access_token_.swap(&RefCell::new(v2.encode()));
                         }
@@ -847,9 +847,9 @@ pub mod service_account {
 
             if jwt_update_expiry_if(&mut *jwt, 50) {
                 if let Some(secret) = self.credentials.keys.secret.as_ref() {
-                    if let Ok(v) = self.jwt.encode(&secret.deref()) {
+                    if let Ok(v) = self.jwt.encode(secret.deref()) {
                         if let Ok(v2) = v.encoded() {
-                            self.access_token_ = Pin::new(Box::new(v2.encode()));
+                            self.access_token_ = v2.encode();
                         }
                     }
                 }
@@ -892,7 +892,7 @@ pub mod service_account {
                 .secret
                 .as_ref()
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
-            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
+            let encoded = jwt.encode(secret.deref())?.encoded()?.encode();
 
             Ok(BlockingSession {
                 access_token_: RefCell::new(encoded),
@@ -929,10 +929,10 @@ pub mod service_account {
                 .secret
                 .as_ref()
                 .ok_or(FirebaseError::Generic("No private key added via add_keypair_key!"))?;
-            let encoded = jwt.encode(&secret.deref())?.encoded()?.encode();
+            let encoded = jwt.encode(secret.deref())?.encoded()?.encode();
 
             Ok(AsyncSession {
-                access_token_: Pin::new(Box::new(encoded)),
+                access_token_: encoded,
                 jwt: Pin::new(Box::new(jwt)),
                 credentials,
                 client_async: reqwest::Client::new(),

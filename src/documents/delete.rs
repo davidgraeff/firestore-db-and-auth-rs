@@ -27,14 +27,14 @@ pub fn delete(auth: &impl FirebaseAuthBearer, path: &str, fail_if_not_existing: 
 
     let resp = auth
         .client()
-        .delete(&url)
+        .delete(url)
         .bearer_auth(auth.access_token().to_owned())
         .json(&query_request)
         .send()?;
 
     extract_google_api_error(resp, || path.to_owned())?;
 
-    Ok({})
+    Ok(())
 }
 
 //#[unstable(feature = "unstable", issue = "1234", reason = "Not yet decided if _async suffix or own module namespace")]
@@ -77,5 +77,5 @@ pub async fn delete_async(
 
     extract_google_api_error_async(resp, || path.to_owned()).await?;
 
-    Ok({})
+    Ok(())
 }
