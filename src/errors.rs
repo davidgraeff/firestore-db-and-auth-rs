@@ -44,11 +44,19 @@ pub enum FirebaseError {
     RSA(ring::error::KeyRejected),
     /// Disk access errors
     IO(std::io::Error),
+    /// Invalid UTF8 encoding errors
+    Utf8(std::str::Utf8Error),
 }
 
 impl std::convert::From<std::io::Error> for FirebaseError {
     fn from(error: std::io::Error) -> Self {
         FirebaseError::IO(error)
+    }
+}
+
+impl std::convert::From<std::str::Utf8Error> for FirebaseError {
+    fn from(error: std::str::Utf8Error) -> Self {
+        FirebaseError::Utf8(error)
     }
 }
 
@@ -107,6 +115,7 @@ impl fmt::Display for FirebaseError {
                     ser.fmt(f)
                 }
             }
+            FirebaseError::Utf8(ref e) => e.fmt(f),
         }
     }
 }
@@ -123,6 +132,7 @@ impl error::Error for FirebaseError {
             FirebaseError::RSA(_) => None,
             FirebaseError::IO(ref e) => Some(e),
             FirebaseError::Ser { ref ser, .. } => Some(ser),
+            FirebaseError::Utf8(ref e) => Some(e),
         }
     }
 }

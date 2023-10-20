@@ -10,7 +10,7 @@ use std::fs::File;
 use std::sync::Arc;
 
 use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSet, JWT_AUDIENCE_IDENTITY};
-use crate::errors::FirebaseError;
+use crate::{errors::FirebaseError, jwt::download_google_jwks_async};
 use std::io::BufReader;
 
 type Error = super::errors::FirebaseError;
@@ -159,6 +159,30 @@ impl Credentials {
         Ok(self)
     }
 
+    /// The public keys to verify generated tokens will be downloaded, for the given service account as well as
+    /// for "securetoken@system.gserviceaccount.com".
+    /// Do not use this option if additional downloads are not desired,
+    /// for example in cloud functions that require fast cold boot start times.
+    ///
+    /// You can use [`Credentials::add_jwks_public_keys`] to manually add/replace public keys later on.
+    ///
+    /// Example:
+    ///
+    /// Assuming that your firebase service account credentials file is called "service-account-test.json".
+    ///
+    /// ```no_run
+    /// use firestore_db_and_auth::{Credentials};
+    ///
+    /// let c: Credentials = Credentials::new(include_str!("../tests/service-account-test.json"))?
+    ///     .download_jwkset()?;
+    /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+    /// ```
+    pub async fn async_download_jwkset(mut self) -> Result<Credentials, Error> {
+        self.async_download_google_jwks().await?;
+        self.verify()?;
+        Ok(self)
+    }
+
     /// Verifies that creating access tokens is possible with the given credentials and public keys.
     /// Returns an empty result type on success.
     pub fn verify(&self) -> Result<(), Error> {
@@ -217,6 +241,19 @@ impl Credentials {
         self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
         Ok(())
     }
+
+    /// If you haven't called [`Credentials::add_jwks_public_keys`] to manually add public keys,
+    /// this method will download one for your google service account and one for the oauth related
+    /// securetoken@system.gserviceaccount.com service account.
+    /// THIS IS A NON-BLOCKING OPERATION
+    pub async fn async_download_google_jwks(&mut self) -> Result<(), Error> {
+        let jwks = download_google_jwks_async(&self.client_email).await?;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
+        let jwks = download_google_jwks_async("securetoken@system.gserviceaccount.com").await?;
+        self.add_jwks_public_keys(&JWKSet::new(&jwks)?);
+        Ok(())
+    }
+
     /// Compute the Rsa keypair by using the private_key of the credentials file.
     /// You must call this if you have manually created a credentials object.
     ///

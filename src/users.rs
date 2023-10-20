@@ -7,7 +7,8 @@ use super::errors::{extract_google_api_error, Result};
 use super::sessions::{service_account, user};
 use serde::{Deserialize, Serialize};
 
-use crate::FirebaseAuthBearer;
+use crate::errors::extract_google_api_error_async;
+use crate::{FirebaseAuthBearer, FirebaseAuthBearerAsync};
 
 /// A federated services like Facebook, Github etc that the user has used to
 /// authenticated himself and that he associated with this firebase auth account.
@@ -66,7 +67,7 @@ fn firebase_auth_url(v: &str, v2: &str) -> String {
 /// Error codes:
 /// - INVALID_ID_TOKEN
 /// - USER_NOT_FOUND
-pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
+pub fn user_info(session: &user::BlockingSession) -> Result<FirebaseAuthUserResponse> {
     let url = firebase_auth_url("lookup", &session.api_key);
 
     let resp = session
@@ -87,7 +88,7 @@ pub fn user_info(session: &user::Session) -> Result<FirebaseAuthUserResponse> {
 /// Error codes:
 /// - INVALID_ID_TOKEN
 /// - USER_NOT_FOUND
-pub fn user_remove(session: &user::Session) -> Result<()> {
+pub fn user_remove(session: &user::BlockingSession) -> Result<()> {
     let url = firebase_auth_url("delete", &session.api_key);
     let resp = session
         .client()
@@ -117,7 +118,12 @@ struct SignInUpUserRequest {
     pub returnSecureToken: bool,
 }
 
-fn sign_up_in(session: &service_account::Session, email: &str, password: &str, action: &str) -> Result<user::Session> {
+fn sign_up_in(
+    session: &service_account::BlockingSession,
+    email: &str,
+    password: &str,
+    action: &str,
+) -> Result<user::BlockingSession> {
     let url = firebase_auth_url(action, &session.credentials.api_key);
     let resp = session
         .client()
@@ -133,7 +139,7 @@ fn sign_up_in(session: &service_account::Session, email: &str, password: &str, a
 
     let resp: SignInUpUserResponse = resp.json()?;
 
-    Ok(user::Session::new(
+    Ok(user::BlockingSession::new(
         &session.credentials,
         Some(&resp.localId),
         Some(&resp.idToken),
@@ -148,7 +154,11 @@ fn sign_up_in(session: &service_account::Session, email: &str, password: &str, a
 /// EMAIL_EXISTS: The email address is already in use by another account.
 /// OPERATION_NOT_ALLOWED: Password sign-in is disabled for this project.
 /// TOO_MANY_ATTEMPTS_TRY_LATER: We have blocked all requests from this device due to unusual activity. Try again later.
-pub fn sign_up(session: &service_account::Session, email: &str, password: &str) -> Result<user::Session> {
+pub fn sign_up(
+    session: &service_account::BlockingSession,
+    email: &str,
+    password: &str,
+) -> Result<user::BlockingSession> {
     sign_up_in(session, email, password, "signUp")
 }
 
@@ -158,6 +168,114 @@ pub fn sign_up(session: &service_account::Session, email: &str, password: &str) 
 /// EMAIL_NOT_FOUND: There is no user record corresponding to this identifier. The user may have been deleted.
 /// INVALID_PASSWORD: The password is invalid or the user does not have a password.
 /// USER_DISABLED: The user account has been disabled by an administrator.
-pub fn sign_in(session: &service_account::Session, email: &str, password: &str) -> Result<user::Session> {
+pub fn sign_in(
+    session: &service_account::BlockingSession,
+    email: &str,
+    password: &str,
+) -> Result<user::BlockingSession> {
     sign_up_in(session, email, password, "signInWithPassword")
+}
+
+/// ASYNC
+
+/// Retrieve information about the firebase auth user associated with the given user session
+///
+/// Error codes:
+/// - INVALID_ID_TOKEN
+/// - USER_NOT_FOUND
+pub async fn async_user_info(session: &mut user::AsyncSession) -> Result<FirebaseAuthUserResponse> {
+    let url = firebase_auth_url("lookup", &session.api_key);
+
+    let resp = session
+        .client_async()
+        .post(&url)
+        .json(&UserRequest {
+            idToken: session.access_token().await.to_string(),
+        })
+        .send()
+        .await?;
+
+    let resp = extract_google_api_error_async(resp, || session.user_id.to_owned()).await?;
+
+    Ok(resp.json().await?)
+}
+
+/// Removes the firebase auth user associated with the given user session
+///
+/// Error codes:
+/// - INVALID_ID_TOKEN
+/// - USER_NOT_FOUND
+pub async fn async_user_remove(session: &mut user::AsyncSession) -> Result<()> {
+    let url = firebase_auth_url("delete", &session.api_key);
+    let resp = session
+        .client_async()
+        .post(&url)
+        .json(&UserRequest {
+            idToken: session.access_token().await.to_string(),
+        })
+        .send()
+        .await?;
+
+    extract_google_api_error_async(resp, || session.user_id.to_owned()).await?;
+    Ok({})
+}
+
+async fn async_sign_up_in(
+    session: &service_account::AsyncSession,
+    email: &str,
+    password: &str,
+    action: &str,
+) -> Result<user::AsyncSession> {
+    let url = firebase_auth_url(action, &session.credentials.api_key);
+    let resp = session
+        .client_async()
+        .post(&url)
+        .json(&SignInUpUserRequest {
+            email: email.to_owned(),
+            password: password.to_owned(),
+            returnSecureToken: true,
+        })
+        .send()
+        .await?;
+
+    let resp = extract_google_api_error_async(resp, || email.to_owned()).await?;
+
+    let resp: SignInUpUserResponse = resp.json().await?;
+
+    Ok(user::AsyncSession::new(
+        &session.credentials,
+        Some(&resp.localId),
+        Some(&resp.idToken),
+        Some(&resp.refreshToken),
+    )
+    .await?)
+}
+
+/// Creates the firebase auth user with the given email and password and returns
+/// a user session.
+///
+/// Error codes:
+/// EMAIL_EXISTS: The email address is already in use by another account.
+/// OPERATION_NOT_ALLOWED: Password sign-in is disabled for this project.
+/// TOO_MANY_ATTEMPTS_TRY_LATER: We have blocked all requests from this device due to unusual activity. Try again later.
+pub async fn async_sign_up(
+    session: &service_account::AsyncSession,
+    email: &str,
+    password: &str,
+) -> Result<user::AsyncSession> {
+    async_sign_up_in(session, email, password, "signUp").await
+}
+
+/// Signs in with the given email and password and returns a user session.
+///
+/// Error codes:
+/// EMAIL_NOT_FOUND: There is no user record corresponding to this identifier. The user may have been deleted.
+/// INVALID_PASSWORD: The password is invalid or the user does not have a password.
+/// USER_DISABLED: The user account has been disabled by an administrator.
+pub async fn async_sign_in(
+    session: &service_account::AsyncSession,
+    email: &str,
+    password: &str,
+) -> Result<user::AsyncSession> {
+    async_sign_up_in(session, email, password, "signInWithPassword").await
 }

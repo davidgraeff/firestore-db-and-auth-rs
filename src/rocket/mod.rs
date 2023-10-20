@@ -37,7 +37,7 @@ use rocket::{http::Status, request, Outcome, State};
 /// Use this Rocket guard to secure a route for authenticated users only.
 /// Will return the associated session, that contains the used access token for further use
 /// and access to the Firestore database.
-pub struct FirestoreAuthSessionGuard(pub sessions::user::Session);
+pub struct FirestoreAuthSessionGuard(pub sessions::user::BlockingSession);
 
 impl<'a, 'r> request::FromRequest<'a, 'r> for FirestoreAuthSessionGuard {
     type Error = FirebaseError;
@@ -68,7 +68,7 @@ impl<'a, 'r> request::FromRequest<'a, 'r> for FirestoreAuthSessionGuard {
             }
         };
 
-        let session = sessions::user::Session::by_access_token(&db, bearer);
+        let session = sessions::user::BlockingSession::by_access_token(&db, bearer);
         if session.is_err() {
             return Outcome::Forward(());
         }

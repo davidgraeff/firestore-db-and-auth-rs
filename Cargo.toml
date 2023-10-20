@@ -7,18 +7,20 @@ license = "MIT"
 description = "This crate allows easy access to your Google Firestore DB via service account or OAuth impersonated Google Firebase Auth credentials."
 readme = "readme.md"
 keywords = ["firestore", "auth"]
-categories = ["api-bindings","authentication"]
+categories = ["api-bindings", "authentication"]
 maintenance = { status = "passively-maintained" }
 repository = "https://github.com/davidgraeff/firestore-db-and-auth-rs"
 
 [dependencies]
-reqwest = { version = "0.11", default-features = false, features = ["json", "blocking"] }
+reqwest = { version = "0.11", features = ["json", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 biscuit = "0.5"
 ring = "0.16"
 base64 = "0.13"
+async-trait = "0.1.74"
+async-iterator = "2.2.0"
 
 [dependencies.rocket]
 version = "0.4.6"
@@ -27,7 +29,7 @@ optional = true
 
 # Render the readme file on doc.rs
 [package.metadata.docs.rs]
-features = [ "external_doc", "rocket_support" ]
+features = ["external_doc", "rocket_support"]
 
 [features]
 default = ["rustls-tls", "unstable"]
@@ -54,4 +56,4 @@ test = true
 [[example]]
 name = "rocket_http_protected_route"
 test = true
-required-features = ["rustls-tls","rocket_support"]
+required-features = ["rustls-tls", "rocket_support"]
