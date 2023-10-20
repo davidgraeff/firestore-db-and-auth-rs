@@ -5,6 +5,7 @@ use std::fmt;
 
 use reqwest;
 use reqwest::StatusCode;
+
 use serde::{Deserialize, Serialize};
 
 /// A result type that uses [`FirebaseError`] as an error type

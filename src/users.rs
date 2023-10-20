@@ -200,6 +200,137 @@ pub async fn async_user_info(session: &mut user::AsyncSession) -> Result<Firebas
     Ok(resp.json().await?)
 }
 
+/// Retrieve information about the firebase auth user associated with the given user session
+///
+/// Error codes:
+/// - INVALID_ID_TOKEN
+/// - USER_NOT_FOUND
+async fn async_update_user(
+    session: &mut user::AsyncSession,
+    email: Option<&str>,
+    password: Option<&str>,
+) -> Result<Option<UpdateUser>> {
+    let url = format!(
+        "https://identitytoolkit.googleapis.com/v1/accounts:update?key={}",
+        session.api_key,
+    );
+
+    let resp = session
+        .client_async()
+        .post(url)
+        .header("Content-Type", "application/json")
+        .json(&UpdateUserPayload {
+            id_token: &session.access_token().await,
+            email,
+            password,
+            return_secure_token: false,
+        })
+        .send()
+        .await?;
+    if resp.status() != 200 {
+        extract_google_api_error_async(resp, || session.user_id.to_owned()).await?;
+        return Ok(None);
+    } else {
+        let body = resp.json::<UpdateUser>().await?;
+        return Ok(Some(body));
+    }
+}
+
+// Change Email/Password
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateUserPayload<'a> {
+    id_token: &'a str,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<&'a str>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    password: Option<&'a str>,
+
+    return_secure_token: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUser {
+    pub kind: String,
+    pub local_id: String,
+    pub email: String,
+    pub provider_user_info: Vec<ProviderUserInfo>,
+    pub password_hash: String,
+    pub email_verified: bool,
+    pub id_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub expires_in: Option<String>,
+}
+
+async fn async_send_oob_code(
+    session: &mut user::AsyncSession,
+    request_type: &str,
+    email: Option<&str>,
+) -> Result<Option<SendOobCode>> {
+    let url = format!(
+        "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={}",
+        session.api_key,
+    );
+
+    let resp = session
+        .client_async()
+        .post(url)
+        .header("Content-Type", "application/json")
+        .json(&SendOobCodePayload {
+            request_type,
+            id_token: &session.access_token().await,
+            email,
+        })
+        .send()
+        .await?;
+    if resp.status() != 200 {
+        extract_google_api_error_async(resp, || session.user_id.to_owned()).await?;
+        return Ok(None);
+    } else {
+        let body = resp.json::<SendOobCode>().await?;
+        return Ok(Some(body));
+    }
+}
+
+// Email Verification
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SendOobCodePayload<'a> {
+    request_type: &'a str,
+    id_token: &'a str,
+    email: Option<&'a str>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendOobCode {
+    pub kind: String,
+    pub email: String,
+}
+
+/// Update a user's email
+pub async fn change_email(session: &mut user::AsyncSession, email: &str) -> Result<Option<UpdateUser>> {
+    async_update_user(session, Some(email), None).await
+}
+
+/// Update a user's password
+pub async fn change_password(session: &mut user::AsyncSession, password: &str) -> Result<Option<UpdateUser>> {
+    async_update_user(session, None, Some(password)).await
+}
+
+/// Send password reset email
+pub async fn reset_password(session: &mut user::AsyncSession, email: &str) -> Result<Option<SendOobCode>> {
+    async_send_oob_code(session, "PASSWORD_RESET", Some(email)).await
+}
+
+/// Send email verification message
+pub async fn verify_email(session: &mut user::AsyncSession) -> Result<Option<SendOobCode>> {
+    async_send_oob_code(session, "VERIFY_EMAIL", None).await
+}
+
 /// Removes the firebase auth user associated with the given user session
 ///
 /// Error codes:
