@@ -5,7 +5,7 @@ use firestore_db_and_auth::jwt::download_google_jwks;
 #[allow(dead_code)]
 pub const TEST_USER_ID: &str = include_str!("../test_user_id.txt");
 
-pub fn user_session_with_cached_refresh_token(cred: &Credentials) -> errors::Result<sessions::user::Session> {
+pub fn user_session_with_cached_refresh_token(cred: &Credentials) -> errors::Result<sessions::user::BlockingSession> {
     println!("Refresh token from file");
     // Read refresh token from file if possible instead of generating a new refresh token each time
     let refresh_token: String = match std::fs::read_to_string("refresh-token-for-tests.txt") {
@@ -20,13 +20,13 @@ pub fn user_session_with_cached_refresh_token(cred: &Credentials) -> errors::Res
 
     // Generate a new refresh token if necessary
     println!("Generate new user auth token");
-    let user_session: sessions::user::Session = if refresh_token.is_empty() {
-        let session = sessions::user::Session::by_user_id(&cred, TEST_USER_ID, true)?;
+    let user_session: sessions::user::BlockingSession = if refresh_token.is_empty() {
+        let session = sessions::user::BlockingSession::by_user_id(&cred, TEST_USER_ID, true)?;
         std::fs::write("refresh-token-for-tests.txt", &session.refresh_token.as_ref().unwrap())?;
         session
     } else {
         println!("user::Session::by_refresh_token");
-        sessions::user::Session::by_refresh_token(&cred, &refresh_token)?
+        sessions::user::BlockingSession::by_refresh_token(&cred, &refresh_token)?
     };
 
     Ok(user_session)

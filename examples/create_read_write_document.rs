@@ -1,4 +1,4 @@
-use firestore_db_and_auth::{documents, dto, errors, sessions, Credentials, FirebaseAuthBearer, ServiceSession};
+use firestore_db_and_auth::{documents, dto, errors, sessions, Credentials, BlockingServiceSession, FirebaseAuthBearer};
 
 use firestore_db_and_auth::documents::WriteResult;
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ struct DemoDTOPartial {
     an_int: u32,
 }
 
-fn write_document(session: &mut ServiceSession, doc_id: &str) -> errors::Result<WriteResult> {
+fn write_document(session: &mut BlockingServiceSession, doc_id: &str) -> errors::Result<WriteResult> {
     println!("Write document");
 
     let obj = DemoDTO {
@@ -33,7 +33,7 @@ fn write_document(session: &mut ServiceSession, doc_id: &str) -> errors::Result<
     documents::write(session, "tests", Some(doc_id), &obj, documents::WriteOptions::default())
 }
 
-fn write_partial_document(session: &mut ServiceSession, doc_id: &str) -> errors::Result<WriteResult> {
+fn write_partial_document(session: &mut BlockingServiceSession, doc_id: &str) -> errors::Result<WriteResult> {
     println!("Partial write document");
 
     let obj = DemoDTOPartial {
@@ -63,7 +63,7 @@ fn check_write(result: WriteResult, doc_id: &str) {
 }
 
 fn service_account_session(cred: Credentials) -> errors::Result<()> {
-    let mut session = ServiceSession::new(cred).unwrap();
+    let mut session = BlockingServiceSession::new(cred).unwrap();
     let b = session.access_token().to_owned();
 
     let doc_id = "service_test";
@@ -97,7 +97,7 @@ fn user_account_session(cred: Credentials) -> errors::Result<()> {
     assert_eq!(user_session.project_id(), cred.project_id);
 
     println!("user::Session::by_access_token");
-    let user_session = sessions::user::Session::by_access_token(&cred, &user_session.access_token_unchecked())?;
+    let user_session = sessions::user::BlockingSession::by_access_token(&cred, &user_session.access_token_unchecked())?;
 
     assert_eq!(user_session.user_id, utils::TEST_USER_ID);
 
