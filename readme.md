@@ -2,10 +2,11 @@
 
 <img alt="Firestore Logo, Copyright by Google" align="right" src="https://github.com/davidgraeff/firestore-db-and-auth-rs/raw/master/doc/logo.png" />
 
-[![Build Status](https://github.com/davidgraeff/firestore-db-and-auth-rs/workflows/Integration/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions)
-[![Build Status](https://github.com/davidgraeff/firestore-db-and-auth-rs/workflows/With%20Rocket/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions)
+[![Integration](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions/workflows/integration.yml/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions/workflows/integration.yml)
+[![With Rocket](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions/workflows/with_rocket.yml/badge.svg)](https://github.com/davidgraeff/firestore-db-and-auth-rs/actions/workflows/with_rocket.yml)
 [![](https://meritbadge.herokuapp.com/firestore-db-and-auth)](https://crates.io/crates/firestore-db-and-auth)
 [![](https://img.shields.io/badge/license-MIT-blue.svg)](http://opensource.org/licenses/MIT)
+![docs.rs](https://img.shields.io/docsrs/firestore-db-and-auth)
 
 This crate allows easy access to your Google Firestore DB via service account or OAuth impersonated Google Firebase Auth credentials.
 Minimum Rust version: 1.38
