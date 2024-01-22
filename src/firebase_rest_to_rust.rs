@@ -114,10 +114,14 @@ pub(crate) fn serde_value_to_firebase_value(v: &serde_json::Value) -> dto::Value
 ///
 /// This is a low level API. You probably want to use [`crate::documents`] instead.
 ///
+/// Arguments:
+/// * document: The document to convert
+/// * input_doc: Optional. The input bytes. Those will be part of the result in case of a parsing error.
+///
 /// Internals:
 ///
 /// This method uses recursion to decode the given firebase type.
-pub fn document_to_pod<T>(input_doc: &Bytes, document: &dto::Document) -> Result<T>
+pub fn document_to_pod<T>(document: &dto::Document, input_doc: Option<&Bytes>) -> Result<T>
 where
     for<'de> T: Deserialize<'de>,
 {
@@ -140,7 +144,9 @@ where
     let v = serde_json::to_value(r)?;
     let r: T = serde_json::from_value(v).map_err(|e| FirebaseError::SerdeVerbose {
         doc: Some(document.name.clone()),
-        input_doc: String::from_utf8_lossy(input_doc).replace("\n", " ").to_string(),
+        input_doc: String::from_utf8_lossy(input_doc.unwrap_or(&Bytes::new()))
+            .replace("\n", " ")
+            .to_string(),
         ser: e,
     })?;
     Ok(r)
@@ -208,7 +214,7 @@ mod tests {
             fields: Some(map),
             ..Default::default()
         };
-        let firebase_doc: DemoPod = document_to_pod(&t)?;
+        let firebase_doc: DemoPod = document_to_pod(&t, None)?;
         assert_eq!(firebase_doc.string_test, "abc");
         assert_eq!(firebase_doc.integer_test, 12);
         assert_eq!(firebase_doc.boolean_test, true);

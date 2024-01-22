@@ -22,7 +22,7 @@ where
         ser: e,
     })?;
 
-    Ok(document_to_pod(&full, &json)?)
+    Ok(document_to_pod(&json, Some(&full))?)
 }
 
 ///

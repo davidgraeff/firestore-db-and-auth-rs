@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2024-01-22
+
 ### Added
 
 - Credentials::download_google_jwks(): Update/replace public keys. Useful for long running services.
@@ -14,14 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Support for reqwest 0.11 / Tokio 1.0
-- Prefer to use `AsRef<str>` when passing params
-- Add ability to read raw document contents (without deserializing the JSON)
-- [Breaking] Change Credentials::new: No JWKSet parameter, use with_jwkset or download_jwkset 
-- [Breaking] Change Credentials::from_file: Do not download jwks anymore. Use with_jwkset or download_jwkset.
-- [Breaking] Rename JWKSetDTO to JWKSet
-- [Breaking] jwt::download_google_jwks returns a string and not a DTO anymore for better error reporting
-- [Breaking] jwt::download_google_jwks_async is behind the unstable feature now, as originally intended
+- [Breaking] Async only API
+- [Breaking] Rocket example uses the Rocket 0.5 release
+- [Breaking] Migrated to Rust edition 2021
 
 ## [0.6.1] - 2020-11-12
 
