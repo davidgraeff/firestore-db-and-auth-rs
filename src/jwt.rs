@@ -76,7 +76,8 @@ pub async fn download_google_jwks(account_mail: &str) -> Result<(String, Option<
         .and_then(|cache_control| cache_control.max_age)
         .and_then(|max_age| Duration::from_std(max_age).ok());
 
-    Ok((resp.text().await?, max_age))
+    let text = resp.text().await?;
+    Ok((text, max_age))
 }
 
 pub(crate) async fn create_jwt_encoded<S: AsRef<str>>(

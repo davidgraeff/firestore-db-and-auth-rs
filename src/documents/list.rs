@@ -15,24 +15,27 @@ use std::boxed::Box;
 ///
 /// Example:
 /// ```no_run
-/// # use serde::{Serialize, Deserialize};
+/// # use futures::{FutureExt, StreamExt};
+/// use serde::{Serialize, Deserialize};
 /// #[derive(Debug, Serialize, Deserialize)]
 /// struct DemoDTO { a_string: String, an_int: u32, }
 ///
 /// use firestore_db_and_auth::documents;
+/// # tokio_test::block_on(async {
 /// # use firestore_db_and_auth::{credentials::Credentials, ServiceSession, errors::Result};
 /// # use firestore_db_and_auth::credentials::doctest_credentials;
-/// # let session = ServiceSession::new(doctest_credentials())?;
+/// # let session = ServiceSession::new(doctest_credentials().await).await.unwrap();
 ///
-/// let values: documents::List<DemoDTO, _> = documents::list(&session, "tests");
-/// for doc_result in values {
+/// let mut stream = documents::list(&session, "tests");
+/// while let Some(Ok(doc_result)) = stream.next().await {
 ///     // The data is wrapped in a Result<> because fetching new data could have failed
 ///     // A tuple is returned on success with the document itself and and metadata
 ///     // with .name, .create_time, .update_time fields.
-///     let (doc, _metadata) = doc_result?;
+///     let (doc, _metadata) = doc_result;
+///     let doc: DemoDTO = doc;
 ///     println!("{:?}", doc);
 /// }
-/// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+/// # })
 /// ```
 ///
 /// ## Arguments
@@ -96,7 +99,7 @@ where
                 this.done = true;
             }
 
-            let result = document_to_pod(&Bytes::new(), &doc);
+            let result = document_to_pod(&doc, None);
             match result {
                 Err(e) => Some((Err(e), this)),
                 Ok(pod) => Some((

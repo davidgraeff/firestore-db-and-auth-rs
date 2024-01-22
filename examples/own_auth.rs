@@ -1,3 +1,4 @@
+use firestore_db_and_auth::errors::FirebaseError::APIError;
 use firestore_db_and_auth::{documents, errors, Credentials, FirebaseAuthBearer};
 
 /// Define your own structure that will implement the FirebaseAuthBearer trait
@@ -29,8 +30,7 @@ impl FirebaseAuthBearer for MyOwnSession {
     }
 }
 
-#[tokio::main]
-async fn main() -> errors::Result<()> {
+async fn run() -> errors::Result<()> {
     let credentials = Credentials::from_file("firebase-service-account.json").await?;
     #[derive(serde::Serialize)]
     struct TestData {
@@ -56,9 +56,14 @@ async fn main() -> errors::Result<()> {
     Ok(())
 }
 
+#[tokio::main]
+async fn main() -> errors::Result<()> {
+    run().await
+}
+
 #[tokio::test]
 async fn own_auth_test() {
-    if let Err(APIError(code, str_code, context)) = main() {
+    if let Err(APIError(code, str_code, context)) = run().await {
         assert_eq!(str_code, "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.");
         assert_eq!(context, "test_doc");
         assert_eq!(code, 401);

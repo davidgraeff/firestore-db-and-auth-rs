@@ -1,6 +1,5 @@
 #![deny(warnings)]
-#![cfg_attr(feature = "external_doc", feature(external_doc))]
-#![cfg_attr(feature = "external_doc", doc(include = "../readme.md"))]
+#![cfg_attr(not(doctest), doc = include_str!("../readme.md"))]
 
 pub mod credentials;
 pub mod documents;

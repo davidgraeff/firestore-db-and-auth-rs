@@ -15,7 +15,7 @@ async fn main() -> Result<(), FirebaseError> {
 
     // Only download the public keys once, and cache them.
     let jwkset = utils::from_cache_file(credential_file.with_file_name("cached_jwks.jwks").as_path(), &cred).await?;
-    cred.add_jwks_public_keys(&jwkset);
+    cred.add_jwks_public_keys(&jwkset).await;
     cred.verify().await?;
 
     let user_session = utils::user_session_with_cached_refresh_token(&cred).await?;

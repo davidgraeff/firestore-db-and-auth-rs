@@ -2,18 +2,20 @@
 //! This module contains the [`crate::credentials::Credentials`] type, used by [`crate::sessions`] to create and maintain
 //! authentication tokens for accessing the Firebase REST API.
 
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use chrono::{offset, DateTime, Duration};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
+use std::io::BufReader;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::jwt::{create_jwt_encoded, download_google_jwks, verify_access_token, JWKSet, JWT_AUDIENCE_IDENTITY};
 use crate::{errors::FirebaseError, jwt::TokenValidationResult};
-use std::io::BufReader;
 
 type Error = super::errors::FirebaseError;
 
@@ -54,14 +56,15 @@ pub struct Credentials {
     pub client_email: String,
     pub client_id: String,
     pub api_key: String,
+    /// The public keys. Those will rotate over time.
+    /// Altering the keys is still a rare operation, so access should
+    /// be optimized for reading, hence the RwLock.
     #[serde(default, skip)]
     pub(crate) keys: Arc<RwLock<Keys>>,
 }
 
 /// Converts a PEM (ascii base64) encoded private key into the binary der representation
 pub fn pem_to_der(pem_file_contents: &str) -> Result<Vec<u8>, Error> {
-    use base64::decode;
-
     let pem_file_contents = pem_file_contents
         .find("-----BEGIN")
         // Cut off the first BEGIN part
@@ -77,7 +80,8 @@ pub fn pem_to_der(pem_file_contents: &str) -> Result<Vec<u8>, Error> {
     }
 
     let base64_body = pem_file_contents.unwrap().replace("\n", "");
-    Ok(decode(&base64_body)
+    Ok(BASE64_STANDARD
+        .decode(&base64_body)
         .map_err(|_| FirebaseError::Generic("Invalid private key in credentials file. Expected Base64 data."))?)
 }
 
@@ -113,9 +117,10 @@ impl Credentials {
     /// use firestore_db_and_auth::{Credentials};
     /// use firestore_db_and_auth::jwt::JWKSet;
     ///
-    /// let c: Credentials = Credentials::new(include_str!("../tests/service-account-test.json"))?
-    ///     .with_jwkset(&JWKSet::new(include_str!("../tests/service-account-test.jwks"))?)?;
-    /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+    /// # tokio_test::block_on(async {
+    /// let c: Credentials = Credentials::new(include_str!("../tests/service-account-test.json")).await.unwrap()
+    ///     .with_jwkset(&JWKSet::new(include_str!("../tests/service-account-test.jwks")).unwrap()).await.unwrap();
+    /// # })
     /// ```
     ///
     /// You need two JWKS files for this crate to work:
@@ -162,9 +167,10 @@ impl Credentials {
     /// ```no_run
     /// use firestore_db_and_auth::{Credentials};
     ///
-    /// let c: Credentials = Credentials::new(include_str!("../tests/service-account-test.json"))?
-    ///     .download_jwkset()?;
-    /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+    /// # tokio_test::block_on(async {
+    /// let c: Credentials = Credentials::new(include_str!("../tests/service-account-test.json")).await.unwrap()
+    ///     .download_jwkset().await.unwrap();
+    /// # })
     /// ```
     pub async fn download_jwkset(self) -> Result<Credentials, Error> {
         self.download_google_jwks().await?;
@@ -217,14 +223,16 @@ impl Credentials {
     /// use firestore_db_and_auth::credentials::Credentials;
     /// use firestore_db_and_auth::JWKSet;
     ///
-    /// let mut c : Credentials = serde_json::from_str(include_str!("../tests/service-account-test.json"))?;
-    /// c.add_jwks_public_keys(&JWKSet::new(include_str!("../tests/service-account-test.jwks"))?);
-    /// c.compute_secret()?;
-    /// c.verify()?;
-    /// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+    /// # tokio_test::block_on(async {
+    /// let mut c : Credentials = serde_json::from_str(include_str!("../tests/service-account-test.json")).unwrap();
+    /// c.add_jwks_public_keys(&JWKSet::new(include_str!("../tests/service-account-test.jwks")).unwrap()).await;
+    /// c.compute_secret().await.unwrap();
+    /// c.verify().await.unwrap();
+    /// # })
     /// ```
     pub async fn add_jwks_public_keys(&self, jwkset: &JWKSet) {
-        let mut keys = self.keys.write().await;
+        let key_lock = self.keys.write();
+        let keys = &mut key_lock.await.pub_key;
 
         for entry in jwkset.keys.iter() {
             if !entry.headers.key_id.is_some() {
@@ -232,7 +240,7 @@ impl Credentials {
             }
 
             let key_id = entry.headers.key_id.as_ref().unwrap().to_owned();
-            keys.pub_key.insert(key_id, Arc::new(entry.ne.jws_public_key_secret()));
+            keys.insert(key_id, Arc::new(entry.ne.jws_public_key_secret()));
         }
     }
 

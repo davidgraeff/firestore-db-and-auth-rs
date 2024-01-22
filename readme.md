@@ -11,6 +11,7 @@ This crate allows easy access to your Google Firestore DB via service account or
 Minimum Rust version: 1.38
 
 Features:
+* Asynchronous API
 * Subset of the Firestore v1 API
 * Optionally handles authentication and token refreshing for you
 * Support for the downloadable Google service account json file from [Google Clound console](https://console.cloud.google.com/apis/credentials/serviceaccountkey).
@@ -36,7 +37,7 @@ Limitations:
 
 This crate operates on DTOs (Data transfer objects) for type-safe operations on your Firestore DB.
 
-```rust
+```rust,no_run
 use firestore_db_and_auth::{Credentials, ServiceSession, documents, errors::Result};
 use serde::{Serialize,Deserialize};
 
@@ -78,34 +79,36 @@ fn write_partial(session: &ServiceSession) -> Result<()> {
 
 Read the document with the id "service_test" from the Firestore "tests" collection:
 
-```rust
+```rust,no_run
+use firestore_db_and_auth::{documents};
 let obj : DemoDTO = documents::read(&session, "tests", "service_test")?;
 ```
 
-For listing all documents of the "tests" collection you want to use the `List` struct which implements the `Iterator` trait.
-It will hide the complexity of the paging API and fetches new documents when necessary:
+For listing all documents of the "tests" collection you want to use the `list` method which implements an async stream.
+This hide the complexity of the paging API and fetches new documents when necessary:
 
-```rust
+```rust,no_run
 use firestore_db_and_auth::{documents};
 
-let values: documents::List<DemoDTO, _> = documents::list(&session, "tests");
-for doc_result in values {
+let mut stream = documents::list(&session, "tests");
+while let Some(Ok(doc_result)) = stream.next().await {
     // The document is wrapped in a Result<> because fetching new data could have failed
-    let (doc, _metadata) = doc_result?;
+    let (doc, _metadata) = doc_result;
+    let doc: DemoDTO = doc;
     println!("{:?}", doc);
 }
 ```
 
 *Note:* The resulting list or list cursor is a snapshot view with a limited lifetime.
-You cannot keep the iterator for long or expect new documents to appear in an ongoing iteration.
+You cannot keep the iterator/stream for long or expect new documents to appear in an ongoing iteration.
 
-For quering the database you would use the `query` method.
+For querying the database you would use the `query` method.
 In the following example the collection "tests" is queried for document(s) with the "id" field equal to "Sam Weiss".
 
-```rust
+```rust,no_run
 use firestore_db_and_auth::{documents, dto};
 
-let values = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id")?;
+let values = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id").await?;
 for metadata in values {
     println!("id: {}, created: {}, updated: {}", metadata.name.as_ref().unwrap(), metadata.create_time.as_ref().unwrap(), metadata.update_time.as_ref().unwrap());
     // Fetch the actual document
@@ -128,10 +131,10 @@ This custom error type wraps all possible errors (IO, Reqwest, JWT errors etc)
 and Google REST API errors. If you want to specifically check for an API error,
 you could do so:
 
-```rust
+```rust,no_run
 use firestore_db_and_auth::{documents, errors::FirebaseError};
 
-let r = documents::delete(&session, "tests/non_existing", true);
+let r = documents::delete(&session, "tests/non_existing", true).await;
 if let Err(e) = r.err() {
     if let FirebaseError::APIError(code, message, context) = e {
         assert_eq!(code, 404);
@@ -151,13 +154,13 @@ It may be the collection or document id or any other context information.
    The file should contain `"private_key_id": ...`.
 2. Add another field `"api_key" : "YOUR_API_KEY"` and replace YOUR_API_KEY with your *Web API key*, to be found in the [Google Firebase console](https://console.firebase.google.com) in "Project Overview -> Settings - > General".
 
-```rust
+```rust,no_run
 use firestore_db_and_auth::{Credentials, ServiceSession};
 
 /// Create credentials object. You may as well do that programmatically.
-let cred = Credentials::from_file("firebase-service-account.json")
+let cred = Credentials::from_file("firebase-service-account.json").await
     .expect("Read credentials file")
-    .download_jwkset()
+    .download_jwkset().await
     .expect("Failed to download public keys");
 /// To use any of the Firestore methods, you need a session first. You either want
 /// an impersonated session bound to a Firebase Auth user or a service account session.
@@ -170,33 +173,33 @@ let session = ServiceSession::new(&cred)
 You can create a user session in various ways.
 If you just have the firebase Auth user_id, you would follow these steps:
 
-```rust
+```rust,no_run
 use firestore_db_and_auth::{Credentials, sessions};
 
 /// Create credentials object. You may as well do that programmatically.
-let cred = Credentials::from_file("firebase-service-account.json")
+let cred = Credentials::from_file("firebase-service-account.json").await
     .expect("Read credentials file")
-    .download_jwkset()
+    .download_jwkset().await
     .expect("Failed to download public keys");
 
 /// To use any of the Firestore methods, you need a session first.
 /// Create an impersonated session bound to a Firebase Auth user via your service account credentials.
-let session = UserSession::by_user_id(&cred, "the_user_id")
+let session = UserSession::by_user_id(&cred, "the_user_id").await
     .expect("Create a user session");
 ```
 
 If you already have a valid refresh token and want to generate an access token (and a session object), you do this instead:
 
-```rust
+```rust,no_run
 let refresh_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
-let session = UserSession::by_refresh_token(&cred, &refresh_token)?;
+let session = UserSession::by_refresh_token(&cred, &refresh_token).await?;
 ```
 
 Another way of retrieving a session object is by providing a valid access token like so:
 
-```rust
+```rust,no_run
 let access_token = "fkjandsfbajsbfd;asbfdaosa.asduabsifdabsda,fd,a,sdbasfadfasfas.dasdasbfadusbflansf";
-let session = UserSession::by_access_token(&cred, &access_token)?;
+let session = UserSession::by_access_token(&cred, &access_token).await?;
 ```
 
 The `by_access_token` method will fail if the token is not valid anymore.
@@ -220,16 +223,16 @@ First download the 2 public key files:
 
 Create a `Credentials` object like so:
 
-```rust
+```rust,no_run
 use firestore_db_and_auth::Credentials;
-let c = Credentials::new(include_str!("firebase-service-account.json"))?
-    .with_jwkset(&JWKSet::new(include_str!("firebase-service-account.jwks"))?)?;
+let c = Credentials::new(include_str!("firebase-service-account.json")).await?
+    .with_jwkset(&JWKSet::new(include_str!("firebase-service-account.jwks"))?).await?;
 ```
 
 > Please note though, that Googles JWK keys change periodically.
 > You probably want to redeploy your service with fresh public keys about every three weeks.
 > 
-> For long running service you want to call Credentials::download_google_jwks() periodically.
+> For long-running service you want to call Credentials::download_google_jwks() periodically.
 
 ### More information
 
@@ -244,19 +247,10 @@ To perform a full integration test (`cargo test`), you need a valid "firebase-se
 The tests expect a Firebase user with the ID given in `examples/test_user_id.txt` to exist.
 [More Information](/doc/integration_tests.md)
 
-## Async vs Sync
-
-This crate uses reqwest under the hood as http client.
-reqwest supports blocking and async/await APIs.
-
-Right now only blocking APIs are provided, some async/await variants are
-gated behind an "unstable" cargo feature.
-
 #### What can be done to make this crate more awesome
 
 This library does not have the ambition to mirror the http/gRPC API 1:1.
 There are auto-generated libraries for this purpose. But the following fits into the crates schema:
 
-* Data streaming via gRPC/Protobuf
 * Nice to have: Transactions, batch_get support for Firestore
 

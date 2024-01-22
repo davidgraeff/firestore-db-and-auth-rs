@@ -205,7 +205,7 @@ async fn main() -> errors::Result<()> {
 
     // Only download the public keys once, and cache them.
     let jwkset = utils::from_cache_file(credential_file.with_file_name("cached_jwks.jwks").as_path(), &cred).await?;
-    cred.add_jwks_public_keys(&jwkset);
+    cred.add_jwks_public_keys(&jwkset).await;
     cred.verify().await?;
 
     // Perform some db operations via a service account session
@@ -225,12 +225,12 @@ async fn valid_test_credentials() -> errors::Result<Credentials> {
     let mut jwks_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     jwks_path.push("firebase-service-account.jwks");
 
-    let mut cred: Credentials = Credentials::new(include_str!("../tests/service-account-test.json"))?;
+    let cred: Credentials = Credentials::new(include_str!("../firebase-service-account.json")).await?;
 
     // Only download the public keys once, and cache them.
     let jwkset = utils::from_cache_file(jwks_path.as_path(), &cred).await?;
-    cred.add_jwks_public_keys(&jwkset);
-    cred.verify()?;
+    cred.add_jwks_public_keys(&jwkset).await;
+    cred.verify().await?;
 
     Ok(cred)
 }

@@ -13,17 +13,18 @@ use std::vec::IntoIter;
 /// use firestore_db_and_auth::{documents, dto};
 /// # use firestore_db_and_auth::{credentials::Credentials, ServiceSession, errors::Result};
 /// # use firestore_db_and_auth::credentials::doctest_credentials;
-/// # let session = ServiceSession::new(doctest_credentials())?;
+/// # tokio_test::block_on(async {
+/// # let session = ServiceSession::new(doctest_credentials().await).await.unwrap();
 ///
-/// let values: documents::Query = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id")?;
+/// let values: documents::Query = documents::query(&session, "tests", "Sam Weiss".into(), dto::FieldOperator::EQUAL, "id").await.unwrap();
 /// for metadata in values {
 ///     println!("id: {}, created: {}, updated: {}", &metadata.name, metadata.create_time.as_ref().unwrap(), metadata.update_time.as_ref().unwrap());
 ///     // Fetch the actual document
 ///     // The data is wrapped in a Result<> because fetching new data could have failed
-///     let doc : DemoDTO = documents::read_by_name(&session, &metadata.name)?;
+///     let doc : DemoDTO = documents::read_by_name(&session, &metadata.name).await.unwrap();
 ///     println!("{:?}", doc);
 /// }
-/// # Ok::<(), firestore_db_and_auth::errors::FirebaseError>(())
+/// # })
 /// ```
 ///
 /// ## Arguments

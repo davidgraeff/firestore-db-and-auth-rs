@@ -47,25 +47,26 @@ pub struct WriteOptions {
 ///    an_int: u32,
 /// }
 ///
-/// fn write(session: &impl FirebaseAuthBearer) -> Result<()> {
+/// async fn write(session: &impl FirebaseAuthBearer) -> Result<()> {
 ///    let obj = DemoDTO { a_string: "abcd".to_owned(), an_int: 14, another_int: 10 };
-///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions::default())?;
+///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions::default()).await?;
 ///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
 ///    Ok(())
 /// }
 /// /// Only write some fields and do not overwrite the entire document.
 /// /// Either via Option<> or by not having the fields in the structure, see DemoPartialDTO.
-/// fn write_partial(session: &impl FirebaseAuthBearer) -> Result<()> {
+/// async fn write_partial(session: &impl FirebaseAuthBearer) -> Result<()> {
 ///    let obj = DemoPartialDTO { a_string: None, an_int: 16 };
-///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions{merge:true})?;
+///    let result = documents::write(session, "tests", Some("service_test"), &obj, documents::WriteOptions{merge:true}).await?;
 ///    println!("id: {}, created: {}, updated: {}", result.document_id, result.create_time.unwrap(), result.update_time.unwrap());
 ///    Ok(())
 /// }
 ///
-/// # fn main() -> Result<()> {
-/// #   let session = ServiceSession::new(doctest_credentials())?;
-/// #   write(&session)?;
-/// #   write_partial(&session)?;
+/// # #[tokio::main]
+/// # async fn main() -> Result<()> {
+/// #   let session = ServiceSession::new(doctest_credentials().await).await?;
+/// #   write(&session).await?;
+/// #   write_partial(&session).await?;
 /// #
 /// #   Ok(())
 /// # }
