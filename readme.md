@@ -9,7 +9,7 @@
 ![docs.rs](https://img.shields.io/docsrs/firestore-db-and-auth)
 
 This crate allows easy access to your Google Firestore DB via service account or OAuth impersonated Google Firebase Auth credentials.
-Minimum Rust version: 1.38
+Minimum Rust version: 1.64
 
 Features:
 * Asynchronous API
